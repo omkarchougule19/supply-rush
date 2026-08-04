@@ -1,0 +1,1619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Supply Rush</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #070d18; --surface: #0a1220; --card: #101a2e; --border: #1a2840;
+      --accent: #FFD24A; --accent2: #FF9A3C; --blue: #60C8FF;
+      --green: #4ADE80; --red: #F87171; --text: #e2e8f5; --muted: #5878a8;
+    }
+    html, body { width:100%; height:100%; overflow:hidden; font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); }
+
+    /* ENTRY */
+    #entry-screen { position:fixed; inset:0; z-index:100; background:var(--bg); display:flex; align-items:center; justify-content:center; }
+    .entry-box { width:420px; background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:40px 36px; text-align:center; }
+    .entry-logo { width:56px; height:56px; background:linear-gradient(135deg,var(--accent),var(--accent2)); border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:28px; margin:0 auto 18px; }
+    .entry-title { font-family:'Space Grotesk',sans-serif; font-size:28px; font-weight:700; color:var(--accent); margin-bottom:6px; }
+    .entry-sub { font-size:13px; color:var(--muted); margin-bottom:28px; }
+    .entry-divider { display:flex; align-items:center; gap:12px; margin:20px 0; }
+    .entry-divider::before, .entry-divider::after { content:''; flex:1; height:1px; background:var(--border); }
+    .entry-divider span { font-size:11px; color:var(--muted); }
+    .entry-btn { width:100%; padding:13px; border:none; border-radius:10px; font-size:14px; font-weight:700; font-family:'Space Grotesk',sans-serif; cursor:pointer; transition:opacity .15s; }
+    .entry-btn:hover { opacity:.88; }
+    .entry-btn-primary { background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#0a1220; }
+    .entry-btn-secondary { background:var(--card); color:var(--text); border:1px solid var(--border); margin-top:10px; }
+    .entry-input { width:100%; background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:13px 14px; color:var(--text); font-size:18px; font-family:'Space Grotesk',sans-serif; font-weight:700; letter-spacing:.15em; text-align:center; outline:none; text-transform:uppercase; margin-bottom:10px; }
+    .entry-input:focus { border-color:var(--accent); }
+    .entry-name-input { width:100%; background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:11px 14px; color:var(--text); font-size:14px; font-family:'Inter',sans-serif; outline:none; margin-bottom:10px; text-align:center; }
+    .entry-name-input:focus { border-color:var(--accent); }
+    .entry-error { font-size:12px; color:var(--red); margin-top:8px; min-height:18px; }
+
+
+    /* PAUSE MENU */
+    #pause-overlay { position:fixed; inset:0; background:rgba(7,13,24,.85); z-index:70; display:none; align-items:center; justify-content:center; backdrop-filter:blur(3px); }
+    #pause-overlay.show { display:flex; }
+    .pause-box { width:340px; background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:32px 28px; text-align:center; }
+    .pause-title { font-family:'Space Grotesk',sans-serif; font-size:20px; font-weight:700; margin-bottom:6px; }
+    .pause-sub { font-size:12px; color:var(--muted); margin-bottom:24px; }
+    .pause-btn { width:100%; padding:12px; border:none; border-radius:10px; font-size:14px; font-weight:700; font-family:'Space Grotesk',sans-serif; cursor:pointer; margin-bottom:10px; transition:opacity .15s; }
+    .pause-btn:hover { opacity:.85; }
+    .pause-btn:last-child { margin-bottom:0; }
+    .pause-resume { background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#0a1220; }
+    .pause-exit { background:var(--card); color:var(--text); border:1px solid var(--border); }
+    .pause-exit-warn { background:transparent; color:var(--red); border:1px solid rgba(248,113,113,.35); }
+    .menu-btn { background:none; border:none; color:var(--muted); font-size:20px; cursor:pointer; padding:4px 8px; border-radius:6px; line-height:1; transition:all .15s; }
+    .menu-btn:hover { background:var(--card); color:var(--text); }
+
+    /* TOPBAR */
+    .topbar { height:58px; background:var(--surface); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; padding:0 22px; flex-shrink:0; }
+    .logo { display:flex; align-items:center; gap:10px; font-family:'Space Grotesk',sans-serif; font-size:17px; font-weight:700; color:var(--accent); }
+    .logo-mark { width:30px; height:30px; background:linear-gradient(135deg,var(--accent),var(--accent2)); border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:15px; }
+    .top-stats { display:flex; align-items:center; gap:18px; }
+    .stat { text-align:right; }
+    .stat-label { font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:.07em; }
+    .stat-val { font-size:14px; font-weight:600; color:#fff; }
+    .pending-indicator { font-size:10px; font-weight:700; margin-top:1px; text-align:right; font-variant-numeric:tabular-nums; }
+    .pending-indicator.cost { color:var(--red); }
+    .pending-indicator.credit { color:var(--green); }
+    .g { color:var(--green); } .a { color:var(--accent); } .b { color:var(--blue); } .neg { color:var(--red); }
+    .vdiv { width:1px; height:24px; background:var(--border); }
+    .run-btn { background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#0a1220; border:none; border-radius:8px; padding:8px 18px; font-size:13px; font-weight:700; font-family:'Space Grotesk',sans-serif; cursor:pointer; transition:opacity .15s; }
+    .run-btn:hover { opacity:.88; }
+    .run-btn:disabled { opacity:.4; cursor:not-allowed; }
+
+    /* LAYOUT */
+    #game-ui { height:100vh; flex-direction:column; display:none; }
+    #game-ui.visible { display:flex; }
+    .game-body { display:flex; flex:1; overflow:hidden; }
+
+    /* SIDEBAR */
+    .sidebar { width:200px; background:var(--surface); border-right:1px solid var(--border); flex-shrink:0; overflow-y:auto; display:flex; flex-direction:column; }
+    .sb-head { padding:14px 14px 8px; font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }
+    .hist-row { display:flex; justify-content:space-between; align-items:center; padding:6px 14px; border-left:3px solid transparent; }
+    .hist-row.now { border-left-color:var(--accent); background:var(--card); }
+    .hist-q { font-size:11px; color:var(--muted); }
+    .hist-row.now .hist-q { color:var(--accent); font-weight:600; }
+    .hist-v { font-size:12px; font-weight:600; }
+    .pos { color:var(--green); }
+    .sb-metrics { padding:10px 14px; display:flex; flex-direction:column; gap:8px; border-top:1px solid var(--border); margin-top:auto; }
+    .forecast-card { margin:0 14px 14px; background:var(--card); border:1px solid var(--border); border-radius:10px; padding:12px 13px; }
+    .forecast-row { display:flex; align-items:center; justify-content:space-between; padding:4px 0; font-size:12px; }
+    .forecast-label { color:#cdd8ee; display:flex; align-items:center; }
+    .forecast-val { font-weight:700; color:#fff; font-variant-numeric:tabular-nums; }
+    .forecast-divider { height:1px; background:var(--border); margin:6px 0; }
+    .forecast-note { font-size:10px; color:var(--muted); margin-top:6px; line-height:1.4; }
+    .m-card { background:var(--card); border-radius:8px; padding:9px 11px; }
+    .m-label { font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:3px; }
+    .m-val { font-size:16px; font-weight:700; color:#fff; }
+    .m-bar { height:3px; background:var(--border); border-radius:2px; margin-top:6px; }
+    .m-fill { height:3px; border-radius:2px; transition:width .4s ease; }
+
+    /* MAP */
+    .map-wrap { flex:1; position:relative; overflow:auto;
+      background:
+        radial-gradient(ellipse 70% 65% at 50% 46%, rgba(96,200,255,.05), transparent 70%),
+        radial-gradient(ellipse 90% 80% at 50% 50%, #0c1526, var(--bg) 75%); }
+    .map-wrap.map-contain { display:flex; align-items:center; justify-content:center; overflow:hidden; }
+    .map-backdrop { position:absolute; inset:0; z-index:0; pointer-events:none;
+      background-size:cover; background-position:center;
+      filter: blur(42px) brightness(.5) saturate(1.15);
+      transform: scale(1.18); /* hides blur edge falloff beyond the wrap's bounds */
+    }
+    .map-backdrop::after { content:''; position:absolute; inset:0;
+      background: radial-gradient(ellipse 75% 70% at 50% 50%, transparent 45%, var(--bg) 100%); }
+    .map-content { position:relative; display:inline-block; border-radius:6px; z-index:1;
+      box-shadow: 0 0 0 1px rgba(255,210,74,.16), 0 0 50px rgba(255,210,74,.06), 0 18px 45px rgba(0,0,0,.55);
+      overflow:hidden; }
+    .map-bg { display:block; }
+    .map-overlay { position:absolute; top:0; left:0; pointer-events:none; }
+    /* HUD-style corner brackets framing the map, matching the amber accent theme */
+    .map-corner { position:absolute; width:22px; height:22px; pointer-events:none; z-index:45; opacity:.55; }
+    .map-corner.tl { top:8px; left:8px; border-top:2px solid var(--accent); border-left:2px solid var(--accent); }
+    .map-corner.tr { top:8px; right:8px; border-top:2px solid var(--accent); border-right:2px solid var(--accent); }
+    .map-corner.bl { bottom:8px; left:8px; border-bottom:2px solid var(--accent); border-left:2px solid var(--accent); }
+    .map-corner.br { bottom:8px; right:8px; border-bottom:2px solid var(--accent); border-right:2px solid var(--accent); }
+
+    /* LEGEND */
+    .legend-panel { width:190px; background:var(--surface); border-left:1px solid var(--border); flex-shrink:0; padding:16px 14px; overflow-y:auto; }
+    .lp-title { font-family:'Space Grotesk',sans-serif; font-size:12px; font-weight:700; color:var(--text); letter-spacing:.04em; margin-bottom:12px; text-transform:uppercase; }
+    .lp-row { display:flex; align-items:center; gap:8px; margin-bottom:9px; }
+    .lp-dot { width:11px; height:11px; border-radius:50%; flex-shrink:0; }
+    .lp-label { font-size:11px; color:#cdd8ee; }
+    .lp-section { font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:.07em; margin:12px 0 7px; }
+
+    /* MAP ELEMENTS */
+    .warehouse-slot, .placed-warehouse, .demand-spot { position:absolute; transform:translate(-50%,-50%); pointer-events:all; }
+    .warehouse-slot { width:34px; height:34px; border-radius:8px; border:2px dashed rgba(255,210,74,.4); background:rgba(255,210,74,.05); display:flex; align-items:center; justify-content:center; font-size:16px; cursor:pointer; transition:all .15s; color:rgba(255,210,74,.45); user-select:none; }
+    .warehouse-slot:hover { border-color:var(--accent); background:rgba(255,210,74,.13); color:var(--accent); transform:translate(-50%,-50%) scale(1.12); }
+    .placed-warehouse { font-size:28px; cursor:pointer; filter:drop-shadow(0 0 7px rgba(255,210,74,.5)); transition:transform .15s; user-select:none; }
+    .placed-warehouse:hover { transform:translate(-50%,-50%) scale(1.13); }
+    .placed-warehouse.building { filter:grayscale(.55) drop-shadow(0 0 6px rgba(96,200,255,.45)); }
+    .placed-warehouse.ready { filter:drop-shadow(0 0 8px rgba(255,210,74,.75)); animation:pulse-ready 1.4s ease-in-out infinite; }
+    @keyframes pulse-ready { 0%,100%{opacity:1} 50%{opacity:.6} }
+    .demand-spot { border-radius:50%; cursor:default; position:absolute; }
+    .demand-spot.urgent { width:15px; height:15px; background:var(--red); border:2px solid rgba(255,255,255,.65); animation:pulse-red 1.6s ease-out infinite; }
+    .demand-spot.nonurgent { width:13px; height:13px; background:var(--blue); border:2px solid rgba(255,255,255,.5); animation:pulse-blue 2s ease-out infinite; }
+    .demand-label { position:absolute; transform:translate(-50%,-50%); font-size:10px; font-weight:700; color:#fff; background:rgba(7,13,24,.82); border:1px solid rgba(255,255,255,.15); border-radius:6px; padding:1px 5px; white-space:nowrap; pointer-events:none; z-index:15; font-variant-numeric:tabular-nums; }
+    .warehouse-label { position:absolute; transform:translate(-50%,-50%); font-size:10px; font-weight:700; background:rgba(7,13,24,.88); border:1px solid rgba(255,255,255,.18); border-radius:6px; padding:2px 7px; white-space:nowrap; pointer-events:none; z-index:16; font-variant-numeric:tabular-nums; }
+    .demand-spot.revealed { width:16px; height:16px; background:rgba(255,210,74,.16); border:2px dashed rgba(255,210,74,.95); cursor:default; box-shadow:0 0 8px rgba(255,210,74,.5); }
+    @keyframes pulse-red  { 0%{box-shadow:0 0 0 0 rgba(248,113,113,.65)} 70%{box-shadow:0 0 0 9px rgba(248,113,113,0)} 100%{box-shadow:0 0 0 0 rgba(248,113,113,0)} }
+    @keyframes pulse-blue { 0%{box-shadow:0 0 0 0 rgba(96,200,255,.55)}  70%{box-shadow:0 0 0 8px rgba(96,200,255,0)}  100%{box-shadow:0 0 0 0 rgba(96,200,255,0)} }
+
+    /* WAREHOUSE PANEL */
+    #wh-panel { position:fixed; top:58px; right:0; bottom:0; width:300px; background:var(--surface); border-left:1px solid var(--border); z-index:50; transform:translateX(100%); transition:transform .25s ease; display:flex; flex-direction:column; overflow-y:auto; }
+    #wh-panel.open { transform:translateX(0); }
+    .wh-panel-head { padding:18px 20px 14px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+    .wh-panel-title { font-family:'Space Grotesk',sans-serif; font-size:15px; font-weight:700; }
+    .wh-panel-close { background:none; border:none; color:var(--muted); font-size:20px; cursor:pointer; line-height:1; }
+    .wh-panel-close:hover { color:var(--text); }
+    .wh-panel-body { padding:16px 20px; flex:1; }
+    .wh-type-card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px; margin-bottom:10px; cursor:pointer; transition:border-color .15s, background .15s; }
+    .wh-type-card:hover { border-color:var(--accent); background:rgba(255,210,74,.04); }
+    .wh-type-card.selected { border-color:var(--accent); background:rgba(255,210,74,.08); }
+    .wh-type-card.cant-afford { opacity:.45; cursor:not-allowed; }
+    .wh-type-name { font-weight:700; font-size:14px; margin-bottom:6px; }
+    .wh-type-stats { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
+    .wh-stat { font-size:11px; color:var(--muted); }
+    .wh-stat span { color:var(--text); font-weight:600; }
+    .wh-panel-section { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.07em; margin:16px 0 8px; }
+    .vehicle-card { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; }
+    .vehicle-name { font-weight:600; font-size:13px; margin-bottom:3px; }
+    .vehicle-meta { font-size:11px; color:var(--muted); }
+    .v-btn { background:var(--border); border:none; border-radius:6px; padding:5px 11px; font-size:11px; font-weight:700; color:var(--text); cursor:pointer; transition:background .15s; white-space:nowrap; }
+    .v-btn:hover { background:#253550; }
+    .v-btn:disabled { opacity:.4; cursor:not-allowed; }
+    .v-btn.sell { color:var(--red); background:rgba(248,113,113,.1); border:1px solid rgba(248,113,113,.3); }
+    .stepper { display:flex; align-items:center; gap:10px; }
+    .stepper-btn { width:26px; height:26px; border-radius:7px; border:1px solid var(--border); background:var(--border); color:var(--text); font-size:15px; font-weight:700; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background .15s; }
+    .stepper-btn:hover:not(:disabled) { background:#2a3c5c; }
+    .stepper-btn:disabled { opacity:.35; cursor:not-allowed; }
+    .stepper-btn.minus { color:var(--red); }
+    .stepper-btn.plus { color:var(--green); }
+    .stepper-count { min-width:18px; text-align:center; font-size:14px; font-weight:700; color:#fff; }
+    .wh-buy-btn { width:100%; padding:12px; background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#0a1220; border:none; border-radius:10px; font-size:14px; font-weight:700; font-family:'Space Grotesk',sans-serif; cursor:pointer; margin-top:16px; transition:opacity .15s; }
+    .wh-buy-btn:hover { opacity:.88; }
+    .wh-buy-btn:disabled { opacity:.38; cursor:not-allowed; }
+    .wh-sell-btn { width:100%; padding:10px; background:transparent; color:var(--red); border:1px solid var(--red); border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; margin-top:8px; transition:background .15s; }
+    .wh-sell-btn:hover { background:rgba(248,113,113,.08); }
+    .wh-fulfill-card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-top:18px; }
+    .wh-fulfill-row { margin-bottom:12px; }
+    .wh-fulfill-row:last-child { margin-bottom:0; }
+    .wh-fulfill-label { display:flex; align-items:center; justify-content:space-between; font-size:12px; margin-bottom:6px; }
+    .wh-fulfill-label .name { display:flex; align-items:center; gap:6px; color:#cdd8ee; }
+    .wh-fulfill-label .amounts { font-weight:700; font-variant-numeric:tabular-nums; }
+    .wh-fulfill-bar { height:7px; background:var(--border); border-radius:4px; overflow:hidden; }
+    .wh-fulfill-fill { height:100%; border-radius:4px; transition:width .25s ease; }
+
+    /* RESULTS POPUP */
+    /* DELIVERY ANIMATION */
+    .delivery-banner { position:absolute; top:14px; left:50%; transform:translateX(-50%); background:rgba(10,18,32,.92); border:1px solid var(--border); border-radius:10px; padding:9px 20px; font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:13px; color:var(--accent); z-index:41; pointer-events:none; white-space:nowrap; box-shadow:0 4px 16px rgba(0,0,0,.35); }
+    .delivery-vehicle { position:absolute; transform:translate(-50%,-50%); font-size:17px; transition: left 1.4s ease-in-out, top 1.4s ease-in-out, transform 1.4s ease-in-out; pointer-events:none; z-index:40; filter:drop-shadow(0 0 4px rgba(0,0,0,.6)); }
+
+    #results-overlay { position:fixed; inset:0; background:rgba(7,13,24,.78); z-index:80; display:none; align-items:center; justify-content:center; }
+    #results-overlay.show { display:flex; }
+    .results-box { width:480px; background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:32px 30px; }
+    .results-title { font-family:'Space Grotesk',sans-serif; font-size:20px; font-weight:700; margin-bottom:4px; }
+    .results-sub { font-size:13px; color:var(--muted); margin-bottom:22px; }
+    .r-activated-callout { display:flex; align-items:center; gap:10px; background:rgba(255,210,74,.1); border:1px solid rgba(255,210,74,.35); border-radius:10px; padding:11px 14px; margin:-8px 0 20px; font-size:13px; font-weight:600; color:var(--accent); }
+    .r-activated-callout .icon { font-size:18px; }
+    .results-grid { display:grid; grid-template-columns:1fr 1fr; gap:11px; margin-bottom:20px; }
+    .r-card { background:var(--card); border-radius:10px; padding:13px 15px; }
+    .r-card.wide { grid-column:span 2; }
+    .r-label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:4px; }
+    .r-val { font-size:20px; font-weight:700; }
+    .r-bar { height:3px; background:var(--border); border-radius:2px; margin-top:8px; }
+    .r-fill { height:3px; border-radius:2px; }
+    .results-next-btn { width:100%; padding:13px; background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#0a1220; border:none; border-radius:10px; font-size:15px; font-weight:700; font-family:'Space Grotesk',sans-serif; cursor:pointer; }
+
+    /* GAME OVER */
+    #gameover-overlay { position:fixed; inset:0; background:rgba(7,13,24,.92); z-index:90; display:none; align-items:center; justify-content:center; }
+    #gameover-overlay.show { display:flex; }
+    .gameover-box { width:500px; background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:40px 36px; text-align:center; }
+    .gameover-icon { font-size:52px; margin-bottom:14px; }
+    .gameover-title { font-family:'Space Grotesk',sans-serif; font-size:26px; font-weight:700; color:var(--accent); margin-bottom:8px; }
+    .gameover-sub { font-size:14px; color:var(--muted); margin-bottom:28px; }
+    .gameover-stats { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:28px; }
+    .go-stat { background:var(--card); border-radius:10px; padding:14px; }
+    .go-label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:4px; }
+    .go-val { font-size:18px; font-weight:700; }
+    .gameover-btn { padding:13px 32px; background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#0a1220; border:none; border-radius:10px; font-size:14px; font-weight:700; font-family:'Space Grotesk',sans-serif; cursor:pointer; }
+  </style>
+</head>
+<body>
+
+<!-- ENTRY SCREEN -->
+<div id="entry-screen">
+  <div class="entry-box">
+    <div class="entry-logo">🚚</div>
+    <div class="entry-title">Supply Rush</div>
+    <p class="entry-sub">A supply chain strategy game</p>
+    <input class="entry-name-input" id="entry-name" type="text" placeholder="Your name (optional)"/>
+    <button class="entry-btn entry-btn-primary" onclick="startNormalMode()">&#9654; Play Now</button>
+    <div class="entry-divider"><span>or enter a class code</span></div>
+    <input class="entry-input" id="entry-code" type="text" maxlength="8" placeholder="RUSH42" oninput="this.value=this.value.toUpperCase()"/>
+    <button class="entry-btn entry-btn-secondary" onclick="startWithCode()">Join Scenario</button>
+    <div class="entry-error" id="entry-error"></div>
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+      <a href="/instructor" style="font-size:12px;color:var(--muted);text-decoration:none;display:inline-flex;align-items:center;gap:5px;transition:color .15s;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">
+        🎓 Instructor Dashboard &#8594;
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- GAME UI -->
+<div id="game-ui">
+  <div class="topbar">
+    <div style="display:flex;align-items:center;gap:12px;"><button class="menu-btn" onclick="openPause()" title="Menu">&#9776;</button><div class="logo"><div class="logo-mark">🚚</div>Supply Rush</div></div>
+    <div class="top-stats">
+      <div class="stat"><div class="stat-label">Quarter</div><div class="stat-val a" id="hud-quarter">Q1 / 16</div></div>
+      <div class="vdiv"></div>
+      <div class="stat"><div class="stat-label">Cash</div><div class="stat-val g" id="hud-cash">$3,000,000</div><div id="hud-pending-vehicles" class="pending-indicator" style="display:none"></div></div>
+      <div class="vdiv"></div>
+      <div class="stat"><div class="stat-label">Last P&amp;L</div><div class="stat-val" id="hud-pl" style="color:var(--muted)">—</div></div>
+      <div class="vdiv"></div>
+      <div class="stat"><div class="stat-label">Serving</div><div class="stat-val b" id="hud-serving">—</div></div>
+      <div class="vdiv"></div>
+      <button class="run-btn" id="run-btn" onclick="runQuarter()">&#9654; Run Quarter</button>
+    </div>
+  </div>
+  <div class="game-body">
+    <div class="sidebar">
+      <div class="sb-head">This Quarter's Demand</div>
+      <div class="forecast-card">
+        <div class="forecast-row">
+          <span class="forecast-label"><span class="lp-dot" style="background:var(--red);width:8px;height:8px;display:inline-block;margin-right:6px;vertical-align:middle"></span>Urgent orders</span>
+          <span class="forecast-val" id="fc-urgent-demand">—</span>
+        </div>
+        <div class="forecast-row">
+          <span class="forecast-label"><span class="lp-dot" style="background:var(--blue);width:8px;height:8px;display:inline-block;margin-right:6px;vertical-align:middle"></span>Non-urgent orders</span>
+          <span class="forecast-val" id="fc-nonurgent-demand">—</span>
+        </div>
+        <div class="forecast-divider"></div>
+        <div class="forecast-row">
+          <span class="forecast-label" id="fc-urgent-label">Urgent-capable capacity</span>
+          <span class="forecast-val" id="fc-urgent-cap">—</span>
+        </div>
+        <div class="forecast-row">
+          <span class="forecast-label">🚛 Non-urgent-capable capacity</span>
+          <span class="forecast-val" id="fc-nonurgent-cap">—</span>
+        </div>
+        <div class="forecast-note">Drones count toward both — their capacity is shared, not doubled.</div>
+      </div>
+      <div class="sb-head">P&amp;L History</div>
+      <div id="pl-history"></div>
+      <div class="sb-metrics">
+        <div class="m-card">
+          <div class="m-label">Utilization</div>
+          <div class="m-val" id="sb-util">—</div>
+          <div class="m-bar"><div class="m-fill" id="sb-util-bar" style="width:0%;background:var(--blue)"></div></div>
+        </div>
+        <div class="m-card">
+          <div class="m-label">Serving %</div>
+          <div class="m-val b" id="sb-serving">—</div>
+          <div class="m-bar"><div class="m-fill" id="sb-serving-bar" style="width:0%;background:var(--blue)"></div></div>
+        </div>
+        <div class="m-card">
+          <div class="m-label">Stockouts</div>
+          <div class="m-val" id="sb-stockouts" style="color:var(--red)">—</div>
+          <div class="m-bar"><div class="m-fill" id="sb-stockout-bar" style="width:0%;background:var(--red)"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="map-wrap" id="mapWrap">
+      <div class="map-backdrop" id="mapBackdrop"></div>
+      <div class="map-content" id="mapContent">
+        <img class="map-bg" id="mapImage" alt="Chicago map"/>
+        <svg class="map-overlay" id="roadOverlay" xmlns="http://www.w3.org/2000/svg"></svg>
+        <div class="map-corner tl"></div>
+        <div class="map-corner tr"></div>
+        <div class="map-corner bl"></div>
+        <div class="map-corner br"></div>
+      </div>
+    </div>
+    <div class="legend-panel">
+      <div class="lp-title">Legend</div>
+      <div class="lp-section">Demand</div>
+      <div class="lp-row"><div class="lp-dot" style="background:var(--red)"></div><div class="lp-label">Urgent order</div></div>
+      <div class="lp-row"><div class="lp-dot" style="background:var(--blue)"></div><div class="lp-label">Non-urgent order</div></div>
+      <div class="lp-row"><div style="width:14px;height:14px;background:rgba(255,210,74,.16);border:2px dashed rgba(255,210,74,.95);border-radius:50%;box-shadow:0 0 4px rgba(255,210,74,.5)"></div><div class="lp-label">Known zone (no order yet)</div></div>
+      <div class="lp-section">Warehouses</div>
+      <div class="lp-row"><span style="font-size:15px">🏭</span><div class="lp-label">Active</div></div>
+      <div class="lp-row"><span style="font-size:15px">🔧</span><div class="lp-label">Under construction</div></div>
+      <div class="lp-row"><div style="width:13px;height:13px;border:2px dashed rgba(255,210,74,.5);border-radius:3px"></div><div class="lp-label">Available slot</div></div>
+      <div class="lp-section">Routes</div>
+      <div class="lp-row"><div style="width:22px;height:2px;background:var(--accent);opacity:.6;border-radius:1px"></div><div class="lp-label">Delivery route</div></div>
+      <div class="lp-section">Mode</div>
+      <div style="font-size:11px;color:var(--muted)" id="legend-mode">Normal</div>
+    </div>
+  </div>
+</div>
+
+<!-- WAREHOUSE PANEL -->
+<div id="wh-panel">
+  <div class="wh-panel-head">
+    <div class="wh-panel-title" id="wh-panel-title">Warehouse</div>
+    <button class="wh-panel-close" onclick="closeWhPanel()">&#10005;</button>
+  </div>
+  <div class="wh-panel-body" id="wh-panel-body"></div>
+</div>
+
+<!-- PAUSE MENU -->
+<div id="pause-overlay">
+  <div class="pause-box">
+    <div class="pause-title">⏸ Game Paused</div>
+    <div class="pause-sub" id="pause-sub">Q<span id="pause-q">1</span> / <span id="pause-total">16</span> &nbsp;·&nbsp; Cash: $<span id="pause-cash">3,000,000</span></div>
+    <button class="pause-btn pause-resume" onclick="closePause()">&#9654; Resume Game</button>
+    <button class="pause-btn pause-exit" onclick="exitToHome(false)">&#8592; Exit to Home</button>
+    <button class="pause-btn pause-exit-warn" onclick="exitToHome(true)">&#10005; Quit &amp; Discard</button>
+  </div>
+</div>
+
+<!-- RESULTS POPUP -->
+<div id="results-overlay">
+  <div class="results-box">
+    <div class="results-title" id="r-title">Quarter Complete</div>
+    <div class="results-sub" id="r-sub"></div>
+    <div id="r-activated"></div>
+    <div class="results-grid" id="r-grid"></div>
+    <button class="results-next-btn" id="r-next-btn">Continue &#8594;</button>
+  </div>
+</div>
+
+<!-- GAME OVER -->
+<div id="gameover-overlay">
+  <div class="gameover-box">
+    <div class="gameover-icon">🏆</div>
+    <div class="gameover-title">Game Complete!</div>
+    <div class="gameover-sub" id="go-sub"></div>
+    <div class="gameover-stats" id="go-stats"></div>
+    <button class="gameover-btn" onclick="location.reload()">Play Again</button>
+  </div>
+</div>
+
+<script>
+var API = "/api";
+var DEMO_ID = "DEMO0000";
+// Max distance (in the same 0-100 x/y percentage-space used by all map
+// coordinates) between a demand spot and its nearest ACTIVE warehouse for a
+// route line to be drawn. Demand farther than this from every warehouse
+// simply gets no line — it's still counted for fulfillment (fulfillment is
+// capacity-based, not distance-based), this only controls the visual route.
+// Set from scenario.warehouse_service_radius once a play loads (see
+// initGame) — instructor-configured only, not shown/adjustable in-game.
+var MAX_ROUTE_DISTANCE = 30;
+
+var state = {
+  playId: null, scenarioCode: null, studentName: null,
+  currentQuarter: 1, totalQuarters: 16,
+  cash: 3000000, completed: false, scenario: null,
+  quarterlyResults: [], placedWarehouses: [],
+  warehouseSlots: [],
+  selectedSlotId: null
+};
+
+// Fallback only — real positions always come from backend scenario config
+var WH_SLOTS = [];
+var DEMAND_POOL = [];
+
+var DEFAULT_SCENARIO = {
+  total_quarters:16, starting_budget:3000000,
+  warehouse_config:{
+    small:{purchase_cost:250000,capacity:500,build_quarters:1,sell_back:125000},
+    medium:{purchase_cost:500000,capacity:1200,build_quarters:2,sell_back:250000},
+    large:{purchase_cost:800000,capacity:2500,build_quarters:4,sell_back:400000}
+  },
+  vehicle_config:{
+    truck:{purchase_cost:80000,operating_cost:8000,capacity:200,sell_back:56000,serves_urgent:false,serves_nonurgent:true},
+    drone:{purchase_cost:25000,operating_cost:3000,capacity:60,sell_back:17500,serves_urgent:true,serves_nonurgent:true}
+  },
+  urgent_order_revenue:45, nonurgent_order_revenue:20,
+  demand_min_per_zone:200, demand_max_per_zone:800, urgent_demand_ratio:0.3,
+  warehouse_service_radius:30,
+  warehouse_slots:WH_SLOTS, demand_zone_positions:DEMAND_POOL
+};
+
+
+/* ── ICONS ── */
+function droneIconSVG(size) {
+  size = size || 17;
+  return '<svg viewBox="0 0 24 24" width="'+size+'" height="'+size+'" xmlns="http://www.w3.org/2000/svg" style="display:block">'
+    + '<line x1="12" y1="12" x2="5" y2="5" stroke="#e2e8f5" stroke-width="1.4"/>'
+    + '<line x1="12" y1="12" x2="19" y2="5" stroke="#e2e8f5" stroke-width="1.4"/>'
+    + '<line x1="12" y1="12" x2="5" y2="19" stroke="#e2e8f5" stroke-width="1.4"/>'
+    + '<line x1="12" y1="12" x2="19" y2="19" stroke="#e2e8f5" stroke-width="1.4"/>'
+    + '<rect x="9.5" y="9.5" width="5" height="5" rx="1.2" fill="#e2e8f5"/>'
+    + '<circle cx="5" cy="5" r="2.6" fill="none" stroke="#60C8FF" stroke-width="1.6"/>'
+    + '<circle cx="19" cy="5" r="2.6" fill="none" stroke="#60C8FF" stroke-width="1.6"/>'
+    + '<circle cx="5" cy="19" r="2.6" fill="none" stroke="#60C8FF" stroke-width="1.6"/>'
+    + '<circle cx="19" cy="19" r="2.6" fill="none" stroke="#60C8FF" stroke-width="1.6"/>'
+    + '</svg>';
+}
+
+/* ── NAVIGATION & PAUSE ── */
+function openPause() {
+  document.getElementById("pause-q").textContent = state.currentQuarter;
+  document.getElementById("pause-total").textContent = state.totalQuarters;
+  document.getElementById("pause-cash").textContent = state.cash.toLocaleString();
+  document.getElementById("pause-overlay").classList.add("show");
+}
+function closePause() {
+  document.getElementById("pause-overlay").classList.remove("show");
+}
+function exitToHome(discard) {
+  var msg = discard
+    ? "Quit and discard all progress? This cannot be undone."
+    : "Exit to home? Your current quarter progress will be lost.";
+  if (!confirm(msg)) return;
+  closePause();
+  // Reset state
+  state.playId = null; state.completed = false;
+  state.quarterlyResults = []; state.placedWarehouses = [];
+  // Go back to entry screen via hash
+  window.location.hash = "";
+  document.getElementById("game-ui").className = "";
+  document.getElementById("entry-screen").style.display = "flex";
+  document.getElementById("entry-error").textContent = "";
+}
+
+// Push hash when game starts so browser back = exit to entry
+function pushPlayingHash() {
+  if (window.location.hash !== "#playing") {
+    history.pushState({playing:true}, "", "#playing");
+  }
+}
+
+// Intercept browser back button while in-game
+window.addEventListener("popstate", function(e) {
+  var inGame = document.getElementById("game-ui").className === "visible";
+  if (inGame) {
+    // Push the hash back so back button works again next time
+    history.pushState({playing:true}, "", "#playing");
+    openPause();
+  }
+});
+
+// On load: if hash is #playing but state is empty, clear hash and show entry
+window.addEventListener("load", function() {
+  if (window.location.hash === "#playing") {
+    history.replaceState({}, "", "/");
+  }
+  var fcLabel = document.getElementById("fc-urgent-label");
+  if (fcLabel) fcLabel.innerHTML = droneIconSVG(13) + ' <span style="vertical-align:middle">Urgent-capable capacity</span>';
+});
+
+/* ── ENTRY ── */
+function startNormalMode() {
+  var name = document.getElementById("entry-name").value.trim();
+  setErr("");
+  fetch(API+"/sessions/normal",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({student_name:name||null})})
+    .then(function(r){ return r.ok ? r.json() : Promise.reject(); })
+    .then(initGame)
+    .catch(function(err){
+      console.error("[Supply Rush] Could not reach backend at "+API+"/sessions/normal — falling back to OFFLINE DEMO MODE. Warehouse builds and demand will run entirely client-side (this is NOT the real simulation). Check that uvicorn is running and reachable at this origin.", err);
+      initGame({play_id:DEMO_ID,scenario_code:null,student_name:name||null,
+        current_quarter:1,total_quarters:16,cash:3000000,completed:false,
+        quarterly_results:[],scenario:DEFAULT_SCENARIO});
+    });
+}
+function startWithCode() {
+  var code = document.getElementById("entry-code").value.trim().toUpperCase();
+  var name = document.getElementById("entry-name").value.trim();
+  if (!code) { setErr("Please enter a scenario code."); return; }
+  setErr("");
+  fetch(API+"/sessions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({scenario_code:code,student_name:name||null})})
+    .then(function(r){ return r.ok ? r.json() : r.json().then(function(e){ throw e; }); })
+    .then(initGame)
+    .catch(function(e){ setErr((e&&e.detail)||"Code not found. Check with your instructor."); });
+}
+function setErr(m){ document.getElementById("entry-error").textContent=m; }
+
+/* ── INIT ── */
+function initGame(data) {
+  state.playId         = data.play_id;
+  state.scenarioCode   = data.scenario_code;
+  state.studentName    = data.student_name;
+  state.currentQuarter = (data.current_quarter !== undefined && data.current_quarter !== null) ? data.current_quarter : 1;
+  state.scenario       = data.scenario||DEFAULT_SCENARIO;
+  state.totalQuarters  = state.scenario.total_quarters||16;
+  state.cash           = (data.cash !== undefined && data.cash !== null) ? data.cash : state.scenario.starting_budget;
+  state.completed      = data.completed||false;
+  state.quarterlyResults = data.quarterly_results||[];
+  state.warehouseSlots   = (state.scenario.warehouse_slots && state.scenario.warehouse_slots.length) ? state.scenario.warehouse_slots : WH_SLOTS;
+  state.placedWarehouses = [];
+  state.urgentSpots      = [];
+  state.nonurgentSpots   = [];
+  state.revealedZones    = [];
+  state.pendingVehicleNetCost = data.pending_vehicle_net_cost || 0;
+  state.demoPendingDeltas = {};
+  MAX_ROUTE_DISTANCE = state.scenario.warehouse_service_radius || 30;
+
+  document.getElementById("entry-screen").style.display = "none";
+  document.getElementById("game-ui").className = "visible";
+  pushPlayingHash();
+  document.getElementById("legend-mode").textContent = state.scenarioCode ? ("Code: "+state.scenarioCode) : "Normal mode";
+
+  updateHUD();
+  updateSidebar();
+  loadMap();
+}
+
+/* ── MAP ── */
+function loadMap() {
+  var img = document.getElementById("mapImage");
+  img.onload = function(){ sizeMap(); fetchDemand(); };
+  img.onerror = function(){ sizeMap(); fetchDemand(); };
+  // Cache-bust every load — browsers cache static images by URL, so simply
+  // replacing the file on disk with the same filename won't show up without
+  // this, even after a hard refresh in some cases.
+  var src = "/static/chicago_zones.png?v=" + Date.now();
+  img.src = src;
+  var backdrop = document.getElementById("mapBackdrop");
+  if (backdrop) backdrop.style.backgroundImage = "url('" + src + "')";
+}
+
+// Below this rendered size, a "contain" fit (whole map visible, no scroll)
+// would make the map too small to actually use — so at that point we
+// switch to a "cover" fit (map fills the viewport, may overflow and
+// scroll) to keep it legible instead. Roughly: full-map-visible on any
+// normal laptop/desktop (~10"+ diagonal), scrollable only on genuinely
+// small windows.
+var MIN_MAP_RENDER_WIDTH  = 480;
+var MIN_MAP_RENDER_HEIGHT = 380;
+
+function sizeMap() {
+  var wrap = document.getElementById("mapWrap");
+  var img  = document.getElementById("mapImage");
+  var mc   = document.getElementById("mapContent");
+  var svg  = document.getElementById("roadOverlay");
+
+  var nw = img.naturalWidth  || 1229;
+  var nh = img.naturalHeight || 1280;
+
+  var containScale = Math.min(wrap.clientWidth/nw, wrap.clientHeight/nh);
+  var containW = nw*containScale, containH = nh*containScale;
+  var useContain = containW >= MIN_MAP_RENDER_WIDTH && containH >= MIN_MAP_RENDER_HEIGHT;
+
+  var scale = useContain ? containScale : Math.max(wrap.clientWidth/nw, wrap.clientHeight/nh);
+  var W = Math.round(nw*scale);
+  var H = Math.round(nh*scale);
+
+  img.style.width  = W+"px";
+  img.style.height = H+"px";
+  mc.style.width   = W+"px";
+  mc.style.height  = H+"px";
+  svg.style.width  = W+"px";
+  svg.style.height = H+"px";
+  svg.setAttribute("viewBox","0 0 "+W+" "+H);
+
+  wrap.classList.toggle("map-contain", useContain);
+  if (!useContain) {
+    wrap.scrollLeft = Math.max(0, W*0.52 - wrap.clientWidth/2);
+    wrap.scrollTop  = Math.max(0, H*0.42 - wrap.clientHeight/2);
+  }
+
+  renderSlots();
+  renderDemandSpots();
+  renderRoutes();
+}
+
+window.addEventListener("resize", function(){
+  if (document.getElementById("game-ui").className === "visible") sizeMap();
+});
+
+/* ── SLOTS ── */
+function renderSlots() {
+  var mc = document.getElementById("mapContent");
+  var old = mc.querySelectorAll(".warehouse-slot,.placed-warehouse");
+  for (var i=0;i<old.length;i++) old[i].remove();
+
+  state.warehouseSlots.forEach(function(slot) {
+    var placed = state.placedWarehouses.filter(function(w){ return w.slotId===slot.id&&!w.isSold; })[0];
+    var el = document.createElement("div");
+    if (placed) {
+      var qtrs = placed.quartersUntilActive || 0;
+      var ready = !placed.isActive && placed.activatesNextRun;
+      el.className = "placed-warehouse" + (placed.isActive ? "" : (ready ? " ready" : " building"));
+      el.textContent = placed.isActive ? "🏭" : (ready ? "⏳" : "🔧");
+      el.title = placed.isActive
+        ? cap(placed.warehouseType)+" warehouse (active)"
+        : ready
+          ? cap(placed.warehouseType)+" warehouse — ready! Will activate when you press Run Quarter."
+          : "Building… active in "+qtrs+" quarter"+(qtrs===1?"":"s");
+      el.onclick = (function(s,p){ return function(){ openManagePanel(s,p); }; })(slot,placed);
+    } else {
+      el.className = "warehouse-slot";
+      el.textContent = "+";
+      el.title = "Click to build a warehouse here";
+      el.onclick = (function(s){ return function(){ openBuyPanel(s); }; })(slot);
+    }
+    el.style.left = slot.x+"%";
+    el.style.top  = slot.y+"%";
+    mc.appendChild(el);
+  });
+  updateDemandForecast();
+  updateWarehouseLabels();
+}
+
+/* ── DEMAND FORECAST ── */
+function computeFleetCapacity() {
+  var dedicatedUrgent=0, dedicatedNonurgent=0, flexible=0;
+  state.placedWarehouses.filter(function(w){ return w.isActive && !w.isSold; }).forEach(function(wh){
+    (wh.vehicles||[]).forEach(function(v){
+      if (v.is_sold) return;
+      var vc = state.scenario.vehicle_config[v.type];
+      if (!vc) return;
+      if (vc.serves_urgent && vc.serves_nonurgent) flexible += vc.capacity;
+      else if (vc.serves_urgent) dedicatedUrgent += vc.capacity;
+      else if (vc.serves_nonurgent) dedicatedNonurgent += vc.capacity;
+    });
+  });
+  return {dedicatedUrgent:dedicatedUrgent, dedicatedNonurgent:dedicatedNonurgent, flexible:flexible};
+}
+
+function capacityForWarehouse(wh) {
+  var total = 0;
+  var counts = wh.vehicleCounts || {};
+  Object.keys(counts).forEach(function(vtype) {
+    var vc = state.scenario.vehicle_config[vtype];
+    if (vc) total += vc.capacity * counts[vtype];
+  });
+  return total;
+}
+
+// Label on each active warehouse: "capacity / demand" for the zones it's
+// currently assigned (nearest-warehouse, within the service radius).
+function updateWarehouseLabels() {
+  var mc = document.getElementById("mapContent");
+  var old = mc.querySelectorAll(".warehouse-label");
+  for (var i=0;i<old.length;i++) old[i].remove();
+
+  var pairs = computeZoneAssignments();
+  computeActiveWarehouseSlots().forEach(function(slot) {
+    var wh = state.placedWarehouses.filter(function(w){ return w.slotId===slot.id && !w.isSold && w.isActive; })[0];
+    if (!wh) return;
+    var capacity = capacityForWarehouse(wh);
+    var demand = pairs.filter(function(p){ return p.slot.id===slot.id; })
+                       .reduce(function(sum,p){ return sum+p.zone.orders; }, 0);
+    var lbl = document.createElement("div");
+    lbl.className = "warehouse-label";
+    lbl.dataset.slotId = slot.id;
+    lbl.style.left = slot.x+"%";
+    lbl.style.top  = (slot.y+3.8)+"%"; // just below the warehouse icon
+    lbl.textContent = capacity.toLocaleString()+" / "+demand.toLocaleString();
+    lbl.style.color = capacity < demand ? "var(--red)" : "var(--green)";
+    mc.appendChild(lbl);
+  });
+}
+
+function updateDemandForecast() {
+  var elU = document.getElementById("fc-urgent-demand");
+  if (!elU) return; // not on this screen yet
+  var urgentDemand    = (state.urgentSpots||[]).reduce(function(s,z){ return s+z.orders; }, 0);
+  var nonurgentDemand = (state.nonurgentSpots||[]).reduce(function(s,z){ return s+z.orders; }, 0);
+  var cap = computeFleetCapacity();
+  var urgentCap    = cap.dedicatedUrgent + cap.flexible;
+  var nonurgentCap = cap.dedicatedNonurgent + cap.flexible;
+
+  elU.textContent = urgentDemand.toLocaleString();
+  document.getElementById("fc-nonurgent-demand").textContent = nonurgentDemand.toLocaleString();
+  var capUEl = document.getElementById("fc-urgent-cap");
+  var capNEl = document.getElementById("fc-nonurgent-cap");
+  capUEl.textContent = urgentCap.toLocaleString();
+  capNEl.textContent = nonurgentCap.toLocaleString();
+  capUEl.style.color = urgentCap < urgentDemand ? "var(--red)" : "var(--green)";
+  capNEl.style.color = nonurgentCap < nonurgentDemand ? "var(--red)" : "var(--green)";
+}
+
+/* ── DEMAND SPOTS ── */
+function renderDemandSpots() {
+  var mc = document.getElementById("mapContent");
+  var old = mc.querySelectorAll(".demand-spot,.demand-label");
+  for (var i=0;i<old.length;i++) old[i].remove();
+
+  // Revealed zones = locations that exist and could produce demand this
+  // game, shown as dashed outline markers so players can plan warehouse
+  // placement even before/without live demand there this quarter.
+  var activeZoneIds = {};
+  (state.urgentSpots||[]).forEach(function(z){ activeZoneIds[z.zone_id]=true; });
+  (state.nonurgentSpots||[]).forEach(function(z){ activeZoneIds[z.zone_id]=true; });
+
+  (state.revealedZones||[]).forEach(function(z) {
+    if (activeZoneIds[z.id]) return; // an active demand dot will cover this zone instead
+    var el = document.createElement("div");
+    el.className = "demand-spot revealed";
+    el.style.left = z.x+"%";
+    el.style.top  = z.y+"%";
+    el.title = "Zone "+z.id+" — no active demand this quarter";
+    mc.appendChild(el);
+  });
+
+  function addLabel(z, text) {
+    var lbl = document.createElement("div");
+    lbl.className = "demand-label";
+    lbl.dataset.zoneId = z.zone_id;
+    lbl.style.left = z.x+"%";
+    lbl.style.top  = (z.y-3.2)+"%"; // sits just above the dot
+    lbl.textContent = text;
+    mc.appendChild(lbl);
+  }
+
+  (state.urgentSpots||[]).forEach(function(z) {
+    var el = document.createElement("div");
+    el.className = "demand-spot urgent";
+    el.style.left = z.x+"%";
+    el.style.top  = z.y+"%";
+    el.title = "Urgent: "+z.orders+" orders";
+    mc.appendChild(el);
+    addLabel(z, z.orders.toLocaleString());
+  });
+
+  (state.nonurgentSpots||[]).forEach(function(z) {
+    var el = document.createElement("div");
+    el.className = "demand-spot nonurgent";
+    el.style.left = z.x+"%";
+    el.style.top  = z.y+"%";
+    el.title = "Non-urgent: "+z.orders+" orders";
+    mc.appendChild(el);
+    addLabel(z, z.orders.toLocaleString());
+  });
+  updateDemandForecast();
+}
+
+/* ── ROUTES ── */
+function computeActiveWarehouseSlots() {
+  return state.warehouseSlots.filter(function(s){
+    return state.placedWarehouses.some(function(w){ return w.slotId===s.id&&!w.isSold&&w.isActive; });
+  });
+}
+
+// Assigns every current demand spot to its nearest active warehouse, but
+// only if within MAX_ROUTE_DISTANCE. Single source of truth for both the
+// route lines and the delivery animation, so they can never disagree about
+// which zones a warehouse serves.
+function computeZoneAssignments() {
+  var active = computeActiveWarehouseSlots();
+  var allSpots = (state.urgentSpots||[]).concat(state.nonurgentSpots||[]);
+  var pairs = [];
+  allSpots.forEach(function(z) {
+    var near=null, minD=Infinity;
+    active.forEach(function(s){
+      var d=Math.sqrt(Math.pow(s.x-z.x,2)+Math.pow(s.y-z.y,2));
+      if(d<minD){minD=d;near=s;}
+    });
+    if (near && minD<=MAX_ROUTE_DISTANCE) pairs.push({slot:near, zone:z});
+  });
+  return pairs;
+}
+
+function renderRoutes() {
+  var svg = document.getElementById("roadOverlay");
+  var mc  = document.getElementById("mapContent");
+  var W = mc.offsetWidth, H = mc.offsetHeight;
+  svg.innerHTML = "";
+  if (!W||!H) return;
+  svg.setAttribute("viewBox","0 0 "+W+" "+H);
+
+  var pairs = computeZoneAssignments();
+  pairs.forEach(function(p) {
+    var near=p.slot, z=p.zone;
+    var line = document.createElementNS("http://www.w3.org/2000/svg","line");
+    line.setAttribute("x1", near.x/100*W);
+    line.setAttribute("y1", near.y/100*H);
+    line.setAttribute("x2", z.x/100*W);
+    line.setAttribute("y2", z.y/100*H);
+    line.setAttribute("stroke","#FFD24A");
+    line.setAttribute("stroke-width","1.5");
+    line.setAttribute("stroke-dasharray","6 3");
+    line.setAttribute("opacity","0.55");
+    svg.appendChild(line);
+  });
+  updateWarehouseLabels();
+}
+
+/* ── DELIVERY ANIMATION ── */
+var DELIVERY_DURATION_MS = 5000;
+
+// Build one animation entry per ACTUAL vehicle at each active warehouse —
+// exactly as many truck/drone icons as that warehouse currently owns, never
+// more, never fewer. Each vehicle heads to a zone the warehouse serves that
+// it's actually capable of serving (respects serves_urgent/serves_nonurgent),
+// cycling through served zones if there are more vehicles than zones.
+function computeDeliveryAnimations() {
+  var pairs = computeZoneAssignments();
+  var animations = [];
+
+  computeActiveWarehouseSlots().forEach(function(slot) {
+    var wh = state.placedWarehouses.filter(function(w){
+      return w.slotId===slot.id && !w.isSold && w.isActive;
+    })[0];
+    if (!wh) return;
+    var counts = wh.vehicleCounts || {};
+
+    var servedZones     = pairs.filter(function(p){ return p.slot.id===slot.id; }).map(function(p){ return p.zone; });
+    var urgentZones      = servedZones.filter(function(z){ return z.type==="urgent"; });
+    var nonurgentZones   = servedZones.filter(function(z){ return z.type==="nonurgent"; });
+
+    Object.keys(counts).forEach(function(vtype) {
+      var count = counts[vtype] || 0;
+      if (count <= 0) return;
+      var vc = state.scenario.vehicle_config[vtype];
+      if (!vc) return;
+      var targets = [];
+      if (vc.serves_urgent)    targets = targets.concat(urgentZones);
+      if (vc.serves_nonurgent) targets = targets.concat(nonurgentZones);
+      if (!targets.length) return;
+
+      for (var i=0; i<count; i++) {
+        var tz = targets[i % targets.length];
+        animations.push({fromX:slot.x, fromY:slot.y, toX:tz.x, toY:tz.y, vtype:vtype, zoneId:tz.zone_id});
+      }
+    });
+  });
+
+  return animations;
+}
+
+// Fixed timeline (ms) within the DELIVERY_DURATION_MS budget:
+//   0    -> OUTBOUND_MS      : vehicles travel out, labels stay untouched
+//   OUTBOUND_MS -> COUNTDOWN_END_MS : vehicle is "at" the zone, label counts
+//                                     down in steps toward its REAL remaining
+//                                     (unfulfilled) amount — not always 0
+//   COUNTDOWN_END_MS -> ...  : vehicles travel back, label already settled
+var OUTBOUND_MS      = 1500;
+var COUNTDOWN_END_MS = 3100;
+
+function showDeliveryOverlay(quarterLabel, animations, resultRef) {
+  var mc = document.getElementById("mapContent");
+
+  var banner = document.createElement("div");
+  banner.className = "delivery-banner";
+  banner.textContent = "🚚 Delivering Q"+quarterLabel+" orders...";
+  mc.appendChild(banner);
+
+  var icons = animations.map(function(a) {
+    var el = document.createElement("div");
+    el.className = "delivery-vehicle";
+    if (a.vtype === "truck") { el.textContent = "🚛"; } else { el.innerHTML = droneIconSVG(17); }
+    el.style.left = a.fromX+"%";
+    el.style.top  = a.fromY+"%";
+    mc.appendChild(el);
+    return el;
+  });
+
+  animations.forEach(function(a, i) {
+    var el = icons[i];
+    var outDelay = 100 + (i % 8) * 60;                 // depart, staggered
+    var backDelay = COUNTDOWN_END_MS + 150 + (i % 8) * 40; // return AFTER countdown settles
+    setTimeout(function(){ el.style.left = a.toX+"%"; el.style.top = a.toY+"%"; }, outDelay);
+    setTimeout(function(){
+      el.style.left = a.fromX+"%"; el.style.top = a.fromY+"%";
+      el.style.transform = "translate(-50%,-50%) scaleX(-1)"; // face the opposite way on return, not flip upside down
+    }, backDelay);
+  });
+
+  state._deliveryIcons  = icons;
+  state._deliveryBanner = banner;
+
+  // Cosmetic-but-honest: once vehicles have arrived (OUTBOUND_MS), each
+  // delivered zone's label counts down in steps from its full order count
+  // toward its REAL leftover (unfulfilled) amount for this quarter — using
+  // the actual backend result once it's in, split by urgent/nonurgent so a
+  // zone that's badly under-served visibly stays high, not falsely at 0.
+  // Finishes at COUNTDOWN_END_MS, well before any vehicle gets back home,
+  // so the player gets a clear read on where they're lagging.
+  var deliveredZoneIds = [];
+  animations.forEach(function(a){ if (deliveredZoneIds.indexOf(a.zoneId)===-1) deliveredZoneIds.push(a.zoneId); });
+  var allSpots = (state.urgentSpots||[]).concat(state.nonurgentSpots||[]);
+  var timers = [];
+
+  var countdownTimer = setTimeout(function() {
+    var res = resultRef && resultRef.value;
+    var urgentRatio = 1, nonurgentRatio = 1; // fallback: assume fully served if we truly have no data
+    if (res) {
+      urgentRatio    = res.urgent_total    > 0 ? res.urgent_fulfilled    / res.urgent_total    : 1;
+      nonurgentRatio = res.nonurgent_total > 0 ? res.nonurgent_fulfilled / res.nonurgent_total : 1;
+    }
+    var steps = 10;
+    var stepTime = (COUNTDOWN_END_MS - OUTBOUND_MS - 100) / steps;
+
+    deliveredZoneIds.forEach(function(zoneId) {
+      var spot = allSpots.filter(function(z){ return z.zone_id===zoneId; })[0];
+      if (!spot) return;
+      var lbl = mc.querySelector('.demand-label[data-zone-id="'+zoneId+'"]');
+      if (!lbl) return;
+      var ratio  = spot.type === "urgent" ? urgentRatio : nonurgentRatio;
+      var target = Math.round(spot.orders * (1 - ratio)); // real leftover, not necessarily 0
+      var current = spot.orders;
+      var perStep = Math.max(1, Math.round((current - target) / steps));
+      var tick = 0;
+      var timer = setInterval(function(){
+        tick++;
+        current = (tick >= steps) ? target : Math.max(target, current - perStep);
+        lbl.textContent = current.toLocaleString();
+        if (current <= target || tick >= steps) {
+          clearInterval(timer);
+          lbl.style.opacity = (target === 0) ? "0.45" : "1";
+          if (target > 0) lbl.style.color = "var(--red)"; // flag unmet demand clearly
+        }
+      }, stepTime);
+      timers.push(timer);
+    });
+
+    // Warehouse-level "capacity / demand" labels count the demand side down
+    // toward the real leftover, using this warehouse's actual orders_handled
+    // from the backend (warehouse_breakdown), same honesty rule as above.
+    var whPairs = computeZoneAssignments();
+    computeActiveWarehouseSlots().forEach(function(slot) {
+      var wh = state.placedWarehouses.filter(function(w){ return w.slotId===slot.id && !w.isSold && w.isActive; })[0];
+      if (!wh) return;
+      var lbl = mc.querySelector('.warehouse-label[data-slot-id="'+slot.id+'"]');
+      if (!lbl) return;
+      var capacity = capacityForWarehouse(wh);
+      var demandTotal = whPairs.filter(function(p){ return p.slot.id===slot.id; })
+                                .reduce(function(sum,p){ return sum+p.zone.orders; }, 0);
+      if (demandTotal <= 0) return;
+      var served = 0;
+      if (res && res.warehouse_breakdown) {
+        var entry = res.warehouse_breakdown.filter(function(b){ return b.slot_id===slot.id; })[0];
+        served = entry ? entry.orders_handled : 0;
+      }
+      var whTarget = Math.max(0, demandTotal - served);
+      var whCurrent = demandTotal;
+      var whPerStep = Math.max(1, Math.round((whCurrent - whTarget) / steps));
+      var whTick = 0;
+      var whTimer = setInterval(function(){
+        whTick++;
+        whCurrent = (whTick >= steps) ? whTarget : Math.max(whTarget, whCurrent - whPerStep);
+        lbl.textContent = capacity.toLocaleString()+" / "+whCurrent.toLocaleString();
+        if (whCurrent <= whTarget || whTick >= steps) {
+          clearInterval(whTimer);
+          lbl.style.color = whTarget > 0 ? "var(--red)" : "var(--green)";
+        }
+      }, stepTime);
+      timers.push(whTimer);
+    });
+  }, OUTBOUND_MS);
+
+  timers.push(countdownTimer);
+  state._deliveryTimers = timers;
+}
+
+function hideDeliveryOverlay() {
+  (state._deliveryIcons||[]).forEach(function(el){ el.remove(); });
+  if (state._deliveryBanner) state._deliveryBanner.remove();
+  (state._deliveryTimers||[]).forEach(function(t){ clearInterval(t); });
+  state._deliveryIcons  = [];
+  state._deliveryBanner = null;
+  state._deliveryTimers = [];
+}
+
+/* ── DEMAND ── */
+function fetchDemand() {
+  if (!state.playId||state.playId===DEMO_ID) { fakeDemand(); return; }
+  fetch(API+"/sessions/"+state.playId+"/demand")
+    .then(function(r){ return r.ok?r.json():Promise.reject(); })
+    .then(function(d){
+      var zones = d.demand_zones || {};
+      state.urgentSpots    = zones.urgent    || [];
+      state.nonurgentSpots = zones.nonurgent || [];
+      state.revealedZones  = d.revealed_zones || [];
+      renderDemandSpots(); renderRoutes();
+    })
+    .catch(function(err){
+      console.error("[Supply Rush] /sessions/"+state.playId+"/demand failed mid-game — falling back to client-side fakeDemand(). This play_id will be out of sync with the backend from here on.", err);
+      fakeDemand();
+    });
+}
+function fakeDemand() {
+  var sc   = state.scenario;
+  var pool = (sc.demand_zone_positions && sc.demand_zone_positions.length) ? sc.demand_zone_positions : DEMAND_POOL;
+  var n    = pool.length;
+  var totalSpots    = Math.max(2, Math.floor(n * (0.5 + Math.random()*0.4)));
+  var urgentCount   = Math.max(1, Math.floor(totalSpots * sc.urgent_demand_ratio));
+  var nonurgCount   = Math.max(1, totalSpots - urgentCount);
+
+  function shuffled(arr) { return arr.slice().sort(function(){ return Math.random()-0.5; }); }
+  function makeSpot(p) {
+    var orders = sc.demand_min_per_zone + Math.floor(Math.random()*(sc.demand_max_per_zone-sc.demand_min_per_zone));
+    return {zone_id:p.id, x:p.x+(Math.random()-0.5)*2.4, y:p.y+(Math.random()-0.5)*2.4, orders:orders};
+  }
+
+  // Draw urgent first, then exclude those zone ids before drawing nonurgent,
+  // so the two sets never land on the same base position (mirrors the
+  // backend fix in game_logic.py generate_demand()).
+  var urgentPicks = shuffled(pool).slice(0, urgentCount);
+  var usedIds = {};
+  urgentPicks.forEach(function(p){ usedIds[p.id] = true; });
+  var remainingPool = pool.filter(function(p){ return !usedIds[p.id]; });
+  var nonurgPicks = shuffled(remainingPool).slice(0, Math.min(nonurgCount, remainingPool.length));
+
+  state.urgentSpots    = urgentPicks.map(makeSpot);
+  state.nonurgentSpots = nonurgPicks.map(makeSpot);
+  renderDemandSpots();
+  renderRoutes();
+}
+
+/* ── BUY PANEL ── */
+function openBuyPanel(slot) {
+  state.selectedSlotId = slot.id;
+  var wc = state.scenario.warehouse_config;
+  var html = '<div class="wh-panel-section">Choose Warehouse Type</div>';
+  Object.keys(wc).forEach(function(type) {
+    var cfg = wc[type];
+    var ok = state.cash >= cfg.purchase_cost;
+    html += '<div class="wh-type-card'+(ok?'':' cant-afford')+'" id="wc-'+type+'" onclick="pickType(\''+type+'\')">'
+      +'<div class="wh-type-name">'+cap(type)+' Warehouse</div>'
+      +'<div class="wh-type-stats">'
+      +'<div class="wh-stat">Cost: <span>$'+fmt(cfg.purchase_cost)+'</span></div>'
+      +'<div class="wh-stat">Capacity: <span>'+fmt(cfg.capacity)+'/qtr</span></div>'
+      +'<div class="wh-stat">Build: <span>'+cfg.build_quarters+' qtr'+(cfg.build_quarters>1?'s':'')+'</span></div>'
+      +'<div class="wh-stat">Sell-back: <span>$'+fmt(cfg.sell_back)+'</span></div>'
+      +'</div></div>';
+  });
+  html += '<button class="wh-buy-btn" id="buy-btn" onclick="confirmBuy()" disabled>Select a type</button>';
+  document.getElementById("wh-panel-title").textContent = "Build Warehouse";
+  document.getElementById("wh-panel-body").innerHTML = html;
+  document.getElementById("wh-panel").classList.add("open");
+}
+
+function pickType(type) {
+  var cfg = state.scenario.warehouse_config[type];
+  document.querySelectorAll(".wh-type-card").forEach(function(c){ c.classList.remove("selected"); });
+  var card = document.getElementById("wc-"+type);
+  if (card) card.classList.add("selected");
+  var btn = document.getElementById("buy-btn");
+  if (state.cash >= cfg.purchase_cost) {
+    btn.disabled = false;
+    btn.textContent = "Build "+cap(type)+" — $"+fmt(cfg.purchase_cost);
+    btn.dataset.type = type;
+  } else {
+    btn.disabled = true;
+    btn.textContent = "Not enough cash";
+  }
+}
+
+function confirmBuy() {
+  var btn  = document.getElementById("buy-btn");
+  var type = btn.dataset.type;
+  if (!type) return;
+  var cfg = state.scenario.warehouse_config[type];
+
+  function doPlace(data) {
+    state.cash = data.cashLeft;
+    state.placedWarehouses.push({
+      id:                  data.id || Date.now(),
+      slotId:              state.selectedSlotId,
+      warehouseType:       type,
+      isActive:            data.isActive !== undefined ? data.isActive : (cfg.build_quarters===0),
+      quartersUntilActive: data.quartersUntilActive !== undefined ? data.quartersUntilActive : cfg.build_quarters,
+      activatesNextRun:    !!data.activatesNextRun,
+      isSold:              false,
+      vehicles:            [],
+      vehicleCounts:       {},
+    });
+    closeWhPanel(); updateHUD(); renderSlots(); renderRoutes();
+  }
+
+  if (state.playId===DEMO_ID) {
+    doPlace({id:Date.now(), cashLeft:state.cash-cfg.purchase_cost,
+      isActive:cfg.build_quarters===0, quartersUntilActive:cfg.build_quarters}); return;
+  }
+  fetch(API+"/sessions/"+state.playId+"/warehouses",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({slot_id:state.selectedSlotId,warehouse_type:type})
+  }).then(function(r){ return r.ok?r.json():r.json().then(function(e){throw e;}); })
+    .then(function(d){ doPlace({id:d.warehouse_id, cashLeft:d.cash_remaining,
+      isActive:d.is_active, quartersUntilActive:d.quarters_until_active, activatesNextRun:d.activates_next_run}); })
+    .catch(function(e){ alert((e&&e.detail)||"Error placing warehouse."); });
+}
+
+/* ── MANAGE PANEL ── */
+// Estimates how much of THIS warehouse's assigned demand its current fleet
+// could fulfill, mirroring the backend's allocation order exactly:
+// dedicated-urgent vehicles serve urgent first, dedicated-nonurgent serve
+// nonurgent, then shared/flexible capacity (drones) tops up urgent first,
+// then whatever's left of nonurgent. This is a live, pre-simulation
+// estimate using the same "nearest warehouse within service radius"
+// assignment as the route lines and capacity label — not a perfect replica
+// of the backend's whole-fleet-wide fulfillment (which competes across ALL
+// warehouses for the same demand pool), but accurate for "is THIS
+// warehouse's own fleet enough for what's near it."
+function computeWarehouseFulfillment(slot, wh) {
+  var pairs = computeZoneAssignments().filter(function(p){ return p.slot.id===slot.id; });
+  var urgentDemand = 0, nonurgentDemand = 0;
+  pairs.forEach(function(p){
+    if (p.zone.type === "urgent") urgentDemand += p.zone.orders;
+    else nonurgentDemand += p.zone.orders;
+  });
+
+  var dedicatedUrgent=0, dedicatedNonurgent=0, flexible=0;
+  var counts = wh.vehicleCounts || {};
+  Object.keys(counts).forEach(function(vtype) {
+    var vc = state.scenario.vehicle_config[vtype];
+    if (!vc) return;
+    var cap = vc.capacity * counts[vtype];
+    if (vc.serves_urgent && vc.serves_nonurgent) flexible += cap;
+    else if (vc.serves_urgent) dedicatedUrgent += cap;
+    else if (vc.serves_nonurgent) dedicatedNonurgent += cap;
+  });
+
+  var fulfilledUrgent = Math.min(dedicatedUrgent, urgentDemand);
+  var remainingUrgent = urgentDemand - fulfilledUrgent;
+  var fulfilledNonurgent = Math.min(dedicatedNonurgent, nonurgentDemand);
+  var remainingNonurgent = nonurgentDemand - fulfilledNonurgent;
+
+  var flex = flexible;
+  var flexToUrgent = Math.min(flex, remainingUrgent);
+  fulfilledUrgent += flexToUrgent; flex -= flexToUrgent;
+  var flexToNonurgent = Math.min(flex, remainingNonurgent);
+  fulfilledNonurgent += flexToNonurgent;
+
+  return {
+    urgentDemand: urgentDemand, nonurgentDemand: nonurgentDemand,
+    urgentFulfilled: fulfilledUrgent, nonurgentFulfilled: fulfilledNonurgent,
+    urgentPct: urgentDemand>0 ? fulfilledUrgent/urgentDemand : 1,
+    nonurgentPct: nonurgentDemand>0 ? fulfilledNonurgent/nonurgentDemand : 1,
+  };
+}
+
+function openManagePanel(slot, placed) {
+  state.selectedSlotId = slot.id;
+  var wCfg = state.scenario.warehouse_config[placed.warehouseType];
+  var vCfg = state.scenario.vehicle_config;
+  var counts = placed.vehicleCounts || {};
+
+  var readyState = !placed.isActive && placed.activatesNextRun;
+  var statusColor = placed.isActive ? 'var(--green)' : (readyState ? 'var(--accent)' : 'var(--blue)');
+  var statusText  = placed.isActive ? 'Active' : (readyState ? 'Ready — activates this run' : 'Building...');
+  var html = '<div style="background:var(--card);border-radius:10px;padding:13px 14px;margin-bottom:4px">'
+    +'<div class="wh-type-stats">'
+    +'<div class="wh-stat">Type: <span>'+cap(placed.warehouseType)+'</span></div>'
+    +'<div class="wh-stat">Capacity: <span>'+fmt(wCfg.capacity)+'/qtr</span></div>'
+    +'<div class="wh-stat" style="grid-column:span 2">Status: <span style="color:'+statusColor+'">'+statusText+'</span></div>'
+    +'</div></div>';
+
+  var totalVehicles = Object.keys(counts).reduce(function(sum,k){ return sum+counts[k]; }, 0);
+  var usedCapacity = Object.keys(counts).reduce(function(sum,type){
+    var vc = vCfg[type];
+    return sum + (vc ? vc.capacity * counts[type] : 0);
+  }, 0);
+  var capacityLimit = wCfg.capacity;
+  html += '<div class="wh-panel-section">Vehicles ('+totalVehicles+' active)</div>';
+  html += '<div style="font-size:11px;color:var(--muted);margin:-6px 0 10px">'
+    + 'Fleet capacity: <span style="color:'+(usedCapacity>=capacityLimit?'var(--red)':'var(--text)')+';font-weight:700">'+fmt(usedCapacity)+' / '+fmt(capacityLimit)+'</span> orders/qtr'
+    + '</div>';
+
+  Object.keys(vCfg).forEach(function(type) {
+    var vc = vCfg[type];
+    var count = counts[type] || 0;
+    // A warehouse can't hold more fleet capacity than its own rating —
+    // cap purchases at that limit regardless of cash on hand.
+    var canBuyCapacity = (usedCapacity + vc.capacity) <= capacityLimit;
+    var canSell = count > 0;
+    html += '<div class="vehicle-card"><div>'
+      +'<div class="vehicle-name" style="display:flex;align-items:center;gap:6px">'+cap(type)+(type==="truck"?" 🚛":" "+droneIconSVG(15))+'</div>'
+      +'<div class="vehicle-meta">'+vc.capacity+' orders/qtr · $'+fmt(vc.operating_cost)+'/qtr op · buy $'+fmt(vc.purchase_cost)+' / sell $'+fmt(vc.sell_back)+'</div>'
+      +'</div>'
+      +'<div class="stepper">'
+      +'<button class="stepper-btn minus" onclick="adjustVehicle('+placed.id+',\''+type+'\',\'sell\')" '+(canSell?'':'disabled')+' title="Sell one '+type+'">−</button>'
+      +'<span class="stepper-count">'+count+'</span>'
+      +'<button class="stepper-btn plus" onclick="adjustVehicle('+placed.id+',\''+type+'\',\'buy\')" '+(canBuyCapacity?'':'disabled')+' title="'+(canBuyCapacity?'Buy one '+type:'Warehouse fleet capacity is full')+'">+</button>'
+      +'</div>'
+      +'</div>';
+  });
+
+  var fc = computeWarehouseFulfillment(slot, placed);
+  html += '<div class="wh-fulfill-card">';
+  html += '<div class="wh-panel-section" style="margin-top:0">This Quarter\'s Demand</div>';
+
+  if (!placed.isActive) {
+    html += '<div style="font-size:12px;color:var(--muted)">Not active yet — no demand assigned until construction finishes.</div>';
+  } else {
+
+  html += '<div class="wh-fulfill-row">'
+    +'<div class="wh-fulfill-label"><span class="name"><span class="lp-dot" style="background:var(--red);width:8px;height:8px;display:inline-block"></span>Urgent</span>'
+    +'<span class="amounts">'+fc.urgentFulfilled.toLocaleString()+' / '+fc.urgentDemand.toLocaleString()+'</span></div>'
+    +'<div class="wh-fulfill-bar"><div class="wh-fulfill-fill" style="width:'+Math.round(fc.urgentPct*100)+'%;background:'+(fc.urgentPct>=1?'var(--green)':'var(--red)')+'"></div></div>'
+    +'</div>';
+
+  html += '<div class="wh-fulfill-row">'
+    +'<div class="wh-fulfill-label"><span class="name"><span class="lp-dot" style="background:var(--blue);width:8px;height:8px;display:inline-block"></span>Non-urgent</span>'
+    +'<span class="amounts">'+fc.nonurgentFulfilled.toLocaleString()+' / '+fc.nonurgentDemand.toLocaleString()+'</span></div>'
+    +'<div class="wh-fulfill-bar"><div class="wh-fulfill-fill" style="width:'+Math.round(fc.nonurgentPct*100)+'%;background:'+(fc.nonurgentPct>=1?'var(--green)':'var(--blue)')+'"></div></div>'
+    +'</div>';
+  }
+  html += '</div>';
+
+  html += '<button class="wh-sell-btn" onclick="sellWarehouse('+placed.id+')">Sell Warehouse — $'+fmt(wCfg.sell_back)+'</button>';
+
+  document.getElementById("wh-panel-title").textContent = cap(placed.warehouseType)+" Warehouse";
+  document.getElementById("wh-panel-body").innerHTML = html;
+  document.getElementById("wh-panel").classList.add("open");
+}
+
+// Mirrors backend compute_pending_vehicle_net_cost — net PER TYPE (a truck
+// sale never offsets a drone purchase). Only used for the offline DEMO_ID
+// fallback; the real backend does this authoritatively server-side.
+function computePendingVehicleNetCost(deltas, vehicleConfig) {
+  var total = 0;
+  Object.keys(deltas).forEach(function(vtype) {
+    var cfg = vehicleConfig[vtype];
+    if (!cfg) return;
+    var counts = deltas[vtype];
+    var net = (counts.bought||0) - (counts.sold||0);
+    total += net >= 0 ? net * cfg.purchase_cost : net * cfg.sell_back;
+  });
+  return total;
+}
+
+function adjustVehicle(whId, type, action) {
+  var wh = state.placedWarehouses.filter(function(w){return w.id===whId;})[0];
+  if (!wh) return;
+  var vc = state.scenario.vehicle_config[type];
+
+  function refresh(cashLeft, counts, pendingNetCost) {
+    state.cash = cashLeft;
+    if (counts) wh.vehicleCounts = counts;
+    if (pendingNetCost !== undefined) state.pendingVehicleNetCost = pendingNetCost;
+    updateHUD();
+    updateDemandForecast();
+    updateWarehouseLabels();
+    var slot = state.warehouseSlots.filter(function(s){return s.id===state.selectedSlotId;})[0];
+    if (slot) openManagePanel(slot, wh);
+  }
+
+  if (action === "buy") {
+    var wCfg = state.scenario.warehouse_config[wh.warehouseType];
+    var currentUsed = Object.keys(wh.vehicleCounts||{}).reduce(function(sum,t){
+      var c = state.scenario.vehicle_config[t];
+      return sum + (c ? c.capacity * wh.vehicleCounts[t] : 0);
+    }, 0);
+    if (currentUsed + vc.capacity > wCfg.capacity) {
+      alert("This warehouse's fleet capacity ("+wCfg.capacity+"/qtr) is full.");
+      return;
+    }
+    if (state.playId===DEMO_ID) {
+      state.demoPendingDeltas = state.demoPendingDeltas || {};
+      var td = state.demoPendingDeltas[type] || {bought:0, sold:0};
+      td.bought += 1;
+      var projected = {}; Object.assign(projected, state.demoPendingDeltas); projected[type] = td;
+      var projectedCost = computePendingVehicleNetCost(projected, state.scenario.vehicle_config);
+      if (state.cash - projectedCost < 0) { alert("Not enough cash."); return; }
+      state.demoPendingDeltas[type] = td;
+      wh.vehicleCounts = wh.vehicleCounts || {};
+      wh.vehicleCounts[type] = (wh.vehicleCounts[type]||0) + 1;
+      wh.vehicles.push({type:type,purchased_at:state.currentQuarter,is_sold:false});
+      refresh(state.cash, wh.vehicleCounts, projectedCost); return;
+    }
+    fetch(API+"/sessions/"+state.playId+"/vehicles",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({warehouse_id:whId,vehicle_type:type})
+    }).then(function(r){ return r.ok?r.json():r.json().then(function(e){throw e;}); })
+      .then(function(d){
+        wh.vehicles = d.vehicles;
+        var counts = {};
+        d.vehicles.forEach(function(v){ if(!v.is_sold) counts[v.type]=(counts[v.type]||0)+1; });
+        refresh(d.cash_remaining, counts, d.pending_vehicle_net_cost);
+      })
+      .catch(function(e){ alert((e&&e.detail)||"Error."); });
+
+  } else {
+    // sell — find last unsold vehicle of this type
+    var counts0 = wh.vehicleCounts || {};
+    if (!counts0[type] || counts0[type] < 1) return;
+    // (No confirm dialog — the +/- stepper is meant to feel instant and reversible-ish.)
+
+    if (state.playId===DEMO_ID) {
+      for (var i=wh.vehicles.length-1; i>=0; i--) {
+        if (wh.vehicles[i].type===type && !wh.vehicles[i].is_sold) {
+          wh.vehicles[i].is_sold = true; break;
+        }
+      }
+      wh.vehicleCounts[type] = Math.max(0, (wh.vehicleCounts[type]||1)-1);
+      state.demoPendingDeltas = state.demoPendingDeltas || {};
+      var td2 = state.demoPendingDeltas[type] || {bought:0, sold:0};
+      td2.sold += 1;
+      state.demoPendingDeltas[type] = td2;
+      var newCost = computePendingVehicleNetCost(state.demoPendingDeltas, state.scenario.vehicle_config);
+      refresh(state.cash, wh.vehicleCounts, newCost); return;
+    }
+    // Find index of last unsold vehicle of this type
+    var idx = -1;
+    for (var j=wh.vehicles.length-1; j>=0; j--) {
+      if (wh.vehicles[j].type===type && !wh.vehicles[j].is_sold) { idx=j; break; }
+    }
+    if (idx < 0) return;
+    fetch(API+"/sessions/"+state.playId+"/vehicles/sell",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({warehouse_id:whId,vehicle_index:idx})
+    }).then(function(r){ return r.ok?r.json():r.json().then(function(e){throw e;}); })
+      .then(function(d){
+        wh.vehicles[idx].is_sold = true;
+        wh.vehicleCounts[type] = Math.max(0,(wh.vehicleCounts[type]||1)-1);
+        refresh(d.cash_remaining, wh.vehicleCounts, d.pending_vehicle_net_cost);
+      })
+      .catch(function(e){ alert((e&&e.detail)||"Error."); });
+  }
+}
+
+function sellWarehouse(whId) {
+  if (!confirm("Sell this warehouse?")) return;
+  var wh  = state.placedWarehouses.filter(function(w){return w.id===whId;})[0];
+  if (!wh) return;
+  var cfg = state.scenario.warehouse_config[wh.warehouseType];
+
+  function doSell(cashLeft) {
+    state.cash = cashLeft;
+    wh.isSold = true;
+    closeWhPanel(); updateHUD(); renderSlots(); renderRoutes();
+  }
+
+  if (state.playId===DEMO_ID) { doSell(state.cash+cfg.sell_back); return; }
+  fetch(API+"/sessions/"+state.playId+"/warehouses/sell",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({warehouse_id:whId})
+  }).then(function(r){ return r.ok?r.json():r.json().then(function(e){throw e;}); })
+    .then(function(d){ doSell(d.cash_remaining); })
+    .catch(function(e){ alert((e&&e.detail)||"Error."); });
+}
+
+function closeWhPanel() {
+  document.getElementById("wh-panel").classList.remove("open");
+  state.selectedSlotId = null;
+}
+
+/* ── RUN QUARTER ── */
+function runQuarter() {
+  var btn = document.getElementById("run-btn");
+  var wasSetup = state.currentQuarter === 0;
+  btn.disabled = true; btn.textContent = wasSetup ? "Starting..." : "Running...";
+
+  var quarterLabel = wasSetup ? 1 : state.currentQuarter;
+  // Setup (Q0) has zero demand by design — nothing is actually delivered,
+  // so an animation would show trucks/drones moving to nowhere. Skip it.
+  var animations = wasSetup ? [] : computeDeliveryAnimations();
+  var hasAnimation = animations.length > 0;
+  var resultRef = {value: null}; // filled in once the real backend result arrives
+  if (hasAnimation) showDeliveryOverlay(quarterLabel, animations, resultRef);
+
+  var animDone = !hasAnimation, backendDone = false, pendingResult = null;
+
+  function tryFinish() {
+    if (!animDone || !backendDone) return;
+    if (hasAnimation) hideDeliveryOverlay();
+    done(pendingResult);
+  }
+
+  if (hasAnimation) {
+    setTimeout(function(){ animDone = true; tryFinish(); }, DELIVERY_DURATION_MS);
+  }
+
+  function done(result) {
+    // Settle & reset the pending vehicle indicator — real backend already
+    // folded this quarter's net vehicle cost into cash_after and returns
+    // pending_vehicle_net_cost:0; demo mode needs its own ledger cleared.
+    state.pendingVehicleNetCost = 0;
+    state.demoPendingDeltas = {};
+
+    // Capture pre-sync active state so we can tell which warehouses became
+    // active AS A RESULT of this specific quarter — used to show a clear
+    // "activated this quarter" callout attributed to the right quarter.
+    var wasActiveBefore = {};
+    state.placedWarehouses.forEach(function(wh){ wasActiveBefore[wh.id] = wh.isActive; });
+
+    // Sync warehouse states from backend (handles build time correctly)
+    if (result.warehouse_states) {
+      result.warehouse_states.forEach(function(ws) {
+        var wh = state.placedWarehouses.filter(function(w){ return w.id===ws.id; })[0];
+        if (wh) {
+          wh.isActive            = ws.is_active;
+          wh.quartersUntilActive = ws.quarters_until_active;
+          wh.activatesNextRun    = !!ws.activates_next_run;
+          wh.vehicleCounts       = ws.vehicle_counts;
+          wh.vehicles            = ws.vehicles;
+        }
+      });
+    } else {
+      // Demo mode fallback — decrement manually
+      state.placedWarehouses.forEach(function(wh){
+        if (!wh.isActive && !wh.isSold) {
+          wh.quartersUntilActive = Math.max(0, (wh.quartersUntilActive||1) - 1);
+          if (wh.quartersUntilActive === 0) wh.isActive = true;
+          wh.activatesNextRun = (!wh.isActive && wh.quartersUntilActive === 1);
+        }
+      });
+    }
+    var newlyActivated = state.placedWarehouses.filter(function(wh){
+      return wh.isActive && !wasActiveBefore[wh.id];
+    });
+    var q = state.currentQuarter;
+    state.cash = result.cash_after;
+    state.currentQuarter = result.next_quarter || (q+1);
+    state.completed = result.completed || state.currentQuarter > state.totalQuarters;
+    renderSlots();
+    btn.disabled = false; btn.textContent = "▶ Run Quarter";
+
+    if (wasSetup) {
+      // Quarter 0 was setup only — demand was 0, nothing was simulated, so
+      // no P&L entry and no results popup. Just move into Q1 and load its
+      // revealed demand (visible for the first time) and updated build
+      // status (a small warehouse may already be fully ready here).
+      updateHUD(); updateSidebar();
+      fetchDemand();
+      return;
+    }
+
+    state.quarterlyResults.push({quarter:q, profit:result.profit, revenue:result.revenue,
+      operating_cost:result.operating_cost, cash_after:result.cash_after,
+      utilization_rate:result.utilization_rate, serving_pct:result.serving_pct, stockouts:result.stockouts});
+    updateHUD(); updateSidebar();
+    showResults(q, result, newlyActivated);
+  }
+
+  if (state.playId===DEMO_ID) {
+    if (wasSetup) {
+      var setupPendingCost = computePendingVehicleNetCost(state.demoPendingDeltas||{}, state.scenario.vehicle_config);
+      pendingResult = {revenue:0, operating_cost:0, profit:0, orders_fulfilled:0, orders_total:0,
+        utilization_rate:0, serving_pct:0, stockouts:0, cash_after: state.cash-setupPendingCost,
+        completed:false, next_quarter:1, quarter:0};
+    } else {
+      pendingResult = localSim();
+    }
+    resultRef.value = pendingResult;
+    backendDone = true; tryFinish(); return;
+  }
+  fetch(API+"/sessions/"+state.playId+"/advance",{method:"POST"})
+    .then(function(r){ return r.ok?r.json():r.json().then(function(e){throw e;}); })
+    .then(function(result){ pendingResult = result; resultRef.value = result; backendDone = true; tryFinish(); })
+    .catch(function(e){
+      hideDeliveryOverlay();
+      alert((e&&e.detail)||"Error.");
+      btn.disabled=false; btn.textContent = wasSetup ? "▶ Start Game" : "▶ Run Quarter";
+    });
+}
+
+function localSim() {
+  var sc=state.scenario, urgCap=0, nonCap=0, opCost=0, totU=0, totN=0;
+  var ranQuarter = state.currentQuarter > 0 ? state.currentQuarter : 1;
+  (state.urgentSpots||[]).forEach(function(z){ totU+=z.orders; });
+  (state.nonurgentSpots||[]).forEach(function(z){ totN+=z.orders; });
+  state.placedWarehouses.filter(function(w){return w.isActive&&!w.isSold;}).forEach(function(wh){
+    wh.vehicles.filter(function(v){return !v.is_sold;}).forEach(function(v){
+      var vc=sc.vehicle_config[v.type];
+      if(vc.serves_urgent) urgCap+=vc.capacity;
+      if(vc.serves_nonurgent) nonCap+=vc.capacity;
+      opCost+=vc.operating_cost;
+    });
+  });
+  var fu=Math.min(urgCap,totU), fn=Math.min(nonCap,totN);
+  var rev=fu*sc.urgent_order_revenue+fn*sc.nonurgent_order_revenue;
+  var profit=rev-opCost, total=totU+totN, fulfilled=fu+fn, totalCap=urgCap+nonCap;
+  var nextQ = ranQuarter+1;
+  var pendingCost = computePendingVehicleNetCost(state.demoPendingDeltas||{}, sc.vehicle_config);
+  return {revenue:rev, operating_cost:opCost, profit:profit,
+    cash_after:state.cash-pendingCost+profit, orders_fulfilled:fulfilled, orders_total:total,
+    urgent_fulfilled:fu, urgent_total:totU, nonurgent_fulfilled:fn, nonurgent_total:totN,
+    utilization_rate:totalCap>0?Math.min(fulfilled/totalCap,1):0,
+    serving_pct:total>0?Math.min(fulfilled/total,1):0,
+    stockouts:total-fulfilled, quarter:ranQuarter,
+    completed:nextQ>state.totalQuarters, next_quarter:nextQ};
+}
+
+/* ── RESULTS ── */
+function showResults(q, r, newlyActivated) {
+  document.getElementById("r-title").textContent = "Q"+q+" Results";
+  document.getElementById("r-sub").textContent = "Quarter "+q+" of "+state.totalQuarters+" complete";
+
+  var activatedEl = document.getElementById("r-activated");
+  if (newlyActivated && newlyActivated.length) {
+    var names = newlyActivated.map(function(wh){ return cap(wh.warehouseType); }).join(", ");
+    var verb = newlyActivated.length===1 ? "warehouse became" : "warehouses became";
+    activatedEl.innerHTML = '<div class="r-activated-callout"><span class="icon">🏭</span>'
+      + '<span>'+names+' '+verb+' active this quarter — now serving demand.</span></div>';
+  } else {
+    activatedEl.innerHTML = "";
+  }
+
+  var pc=r.profit>=0?"var(--green)":"var(--red)", ps=r.profit>=0?"+":"";
+  document.getElementById("r-grid").innerHTML =
+    '<div class="r-card wide"><div class="r-label">Net Profit / Loss</div><div class="r-val" style="color:'+pc+'">'+ps+'$'+fmtK(r.profit)+'</div></div>'
+    +'<div class="r-card"><div class="r-label">Revenue</div><div class="r-val" style="color:var(--green)">$'+fmtK(r.revenue)+'</div></div>'
+    +'<div class="r-card"><div class="r-label">Op. Cost</div><div class="r-val" style="color:var(--red)">$'+fmtK(r.operating_cost)+'</div></div>'
+    +'<div class="r-card"><div class="r-label">Orders Served</div><div class="r-val">'+r.orders_fulfilled.toLocaleString()+'<span style="font-size:12px;color:var(--muted)"> / '+r.orders_total.toLocaleString()+'</span></div>'
+    +'<div class="r-bar"><div class="r-fill" style="width:'+Math.round(r.serving_pct*100)+'%;background:var(--blue)"></div></div></div>'
+    +'<div class="r-card"><div class="r-label">Utilization</div><div class="r-val">'+Math.round(r.utilization_rate*100)+'%</div>'
+    +'<div class="r-bar"><div class="r-fill" style="width:'+Math.round(r.utilization_rate*100)+'%;background:var(--accent)"></div></div></div>'
+    +'<div class="r-card"><div class="r-label">Stockouts</div><div class="r-val" style="color:var(--red)">'+r.stockouts.toLocaleString()+'</div></div>'
+    +'<div class="r-card"><div class="r-label">Cash After</div><div class="r-val">$'+fmtK(state.cash)+'</div></div>';
+
+  var btn = document.getElementById("r-next-btn");
+  if (r.completed || state.completed) {
+    btn.textContent = "See Final Results →";
+    btn.onclick = function(){ document.getElementById("results-overlay").classList.remove("show"); showGameOver(); };
+  } else {
+    btn.textContent = "Start Q"+state.currentQuarter+" →";
+    btn.onclick = function(){ document.getElementById("results-overlay").classList.remove("show"); fetchDemand(); };
+  }
+  document.getElementById("results-overlay").classList.add("show");
+}
+
+/* ── GAME OVER ── */
+function showGameOver() {
+  var totalP = state.quarterlyResults.reduce(function(s,q){return s+q.profit;},0);
+  var avgS   = state.quarterlyResults.reduce(function(s,q){return s+q.serving_pct;},0)/(state.quarterlyResults.length||1);
+  document.getElementById("go-sub").textContent = "You completed all "+state.totalQuarters+" quarters"+(state.studentName?", "+state.studentName:"")+"!";
+  document.getElementById("go-stats").innerHTML =
+    '<div class="go-stat"><div class="go-label">Final Cash</div><div class="go-val" style="color:var(--accent)">$'+fmtK(state.cash)+'</div></div>'
+    +'<div class="go-stat"><div class="go-label">Total P&L</div><div class="go-val" style="color:'+(totalP>=0?'var(--green)':'var(--red)')+'">'+(totalP>=0?'+':'-')+'$'+fmtK(Math.abs(totalP))+'</div></div>'
+    +'<div class="go-stat"><div class="go-label">Avg Serving</div><div class="go-val" style="color:var(--blue)">'+Math.round(avgS*100)+'%</div></div>';
+  document.getElementById("gameover-overlay").classList.add("show");
+}
+
+/* ── HUD & SIDEBAR ── */
+function updatePendingVehicleIndicator(netCost) {
+  state.pendingVehicleNetCost = netCost || 0;
+  var el = document.getElementById("hud-pending-vehicles");
+  if (!netCost || Math.abs(netCost) < 0.5) {
+    el.style.display = "none";
+    return;
+  }
+  el.style.display = "block";
+  if (netCost > 0) {
+    el.className = "pending-indicator cost";
+    el.textContent = "−$"+fmtK(netCost)+" pending";
+  } else {
+    el.className = "pending-indicator credit";
+    el.textContent = "+$"+fmtK(-netCost)+" pending";
+  }
+}
+
+function updateHUD() {
+  document.getElementById("hud-quarter").textContent = state.currentQuarter===0
+    ? "Setup"
+    : "Q"+state.currentQuarter+" / "+state.totalQuarters;
+  var runBtn = document.getElementById("run-btn");
+  if (!runBtn.disabled) {
+    runBtn.textContent = state.currentQuarter===0 ? "▶ Start Game" : "▶ Run Quarter";
+  }
+  document.getElementById("hud-cash").textContent = "$"+state.cash.toLocaleString();
+  updatePendingVehicleIndicator(state.pendingVehicleNetCost);
+  var last = state.quarterlyResults[state.quarterlyResults.length-1];
+  if (last) {
+    var pl = document.getElementById("hud-pl");
+    pl.textContent = (last.profit>=0?"+":"-")+"$"+fmtK(Math.abs(last.profit));
+    pl.className = "stat-val "+(last.profit>=0?"g":"neg");
+    document.getElementById("hud-serving").textContent = Math.round(last.serving_pct*100)+"%";
+  }
+}
+function updateSidebar() {
+  var hist = document.getElementById("pl-history");
+  hist.innerHTML = state.quarterlyResults.map(function(q,i){
+    var last = i===state.quarterlyResults.length-1;
+    return '<div class="hist-row'+(last?' now':'')+'"><span class="hist-q">Q'+q.quarter+(last?' ←':'')+'</span>'
+      +'<span class="hist-v '+(q.profit>=0?'pos':'neg')+'">'+(q.profit>=0?'+':'-')+'$'+fmtK(Math.abs(q.profit))+'</span></div>';
+  }).join('');
+  var last = state.quarterlyResults[state.quarterlyResults.length-1];
+  if (last) {
+    var u=Math.round(last.utilization_rate*100), s=Math.round(last.serving_pct*100);
+    var sp=last.orders_total>0?Math.round(last.stockouts/last.orders_total*100):0;
+    document.getElementById("sb-util").textContent = u+"%";
+    document.getElementById("sb-util-bar").style.width = u+"%";
+    document.getElementById("sb-serving").textContent = s+"%";
+    document.getElementById("sb-serving-bar").style.width = s+"%";
+    document.getElementById("sb-stockouts").textContent = last.stockouts.toLocaleString();
+    document.getElementById("sb-stockout-bar").style.width = sp+"%";
+  }
+}
+
+/* ── UTILS ── */
+function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
+function fmt(n){ return n.toLocaleString(); }
+function fmtK(n){ return Math.abs(n)>=1000 ? Math.round(n/1000)+"k" : Math.round(n)+""; }
+</script>
+</body>
+</html>

@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Supply Rush — Instructor Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:      #070d18;
+      --surface: #0a1220;
+      --card:    #101a2e;
+      --border:  #1a2840;
+      --accent:  #FFD24A;
+      --accent2: #FF9A3C;
+      --blue:    #60C8FF;
+      --green:   #4ADE80;
+      --red:     #F87171;
+      --text:    #e2e8f5;
+      --muted:   #5878a8;
+    }
+    html, body { height: 100%; font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); }
+
+    /* ── Topbar ── */
+    .topbar {
+      height: 58px; background: var(--surface); border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; padding: 0 24px;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; font-family: 'Space Grotesk', sans-serif; font-size: 17px; font-weight: 700; color: var(--accent); }
+    .logo-mark { width: 30px; height: 30px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 15px; }
+    .badge { background: #1a2840; color: var(--blue); border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: 600; letter-spacing: .06em; }
+
+    /* ── Layout ── */
+    .layout { display: flex; height: calc(100vh - 58px); }
+    .nav { width: 200px; background: var(--surface); border-right: 1px solid var(--border); padding: 20px 0; flex-shrink: 0; }
+    .nav-item { padding: 10px 20px; font-size: 13px; color: var(--muted); cursor: pointer; border-left: 3px solid transparent; transition: all .15s; }
+    .nav-item:hover { color: var(--text); background: var(--card); }
+    .nav-item.active { color: var(--accent); border-left-color: var(--accent); background: var(--card); font-weight: 600; }
+    .nav-section { padding: 16px 20px 6px; font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+    .main { flex: 1; overflow-y: auto; padding: 28px 32px; }
+
+    /* ── Cards ── */
+    .page { display: none; }
+    .page.active { display: block; }
+    h2 { font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+    .subtitle { font-size: 13px; color: var(--muted); margin-bottom: 24px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; margin-bottom: 20px; }
+    .card-title { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 16px; }
+
+    /* ── Form ── */
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    input[type=text], input[type=number] {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      padding: 9px 12px; color: var(--text); font-size: 13px; font-family: 'Inter', sans-serif;
+      outline: none; transition: border .15s;
+    }
+    input:focus { border-color: var(--accent); }
+    input[type=range] { accent-color: var(--accent); width: 100%; }
+
+    /* ── Tables inside cards ── */
+    .config-table { width: 100%; border-collapse: collapse; }
+    .config-table th { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; padding: 0 0 10px; text-align: left; font-weight: 600; }
+    .config-table td { padding: 8px 0; border-top: 1px solid var(--border); }
+    .config-table td:first-child { font-size: 13px; font-weight: 600; color: var(--text); padding-right: 16px; }
+    .config-table input { width: 100%; max-width: 120px; }
+
+    /* ── Type pills ── */
+    .pill { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+    .pill-w { background: #1a2840; color: var(--blue); }
+    .pill-v { background: #1a3020; color: var(--green); }
+
+    /* ── Buttons ── */
+    .btn { border: none; border-radius: 8px; padding: 10px 20px; font-size: 13px; font-weight: 700; font-family: 'Space Grotesk', sans-serif; cursor: pointer; transition: opacity .15s; }
+    .btn:hover { opacity: .85; }
+    .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #0a1220; }
+    .btn-secondary { background: var(--border); color: var(--text); }
+    .btn-danger { background: var(--red); color: #fff; }
+    .btn-row { display: flex; gap: 12px; margin-top: 20px; align-items: center; }
+
+    /* ── Code display ── */
+    .code-box {
+      background: var(--bg); border: 2px solid var(--accent); border-radius: 12px;
+      padding: 24px; text-align: center; margin: 20px 0;
+    }
+    .code-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; }
+    .code-value { font-family: 'Space Grotesk', sans-serif; font-size: 42px; font-weight: 700; color: var(--accent); letter-spacing: .15em; }
+    .code-hint { font-size: 12px; color: var(--muted); margin-top: 10px; }
+
+    /* ── Scenario list ── */
+    .scenario-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 0; border-bottom: 1px solid var(--border);
+    }
+    .scenario-row:last-child { border-bottom: none; }
+    .sc-name { font-weight: 600; font-size: 14px; }
+    .sc-meta { font-size: 11px; color: var(--muted); margin-top: 3px; }
+    .sc-code { font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 700; color: var(--accent); letter-spacing: .1em; }
+    .sc-actions { display: flex; gap: 8px; }
+    .sc-btn { padding: 5px 12px; font-size: 11px; }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed; bottom: 28px; right: 28px; background: var(--green); color: #0a1220;
+      border-radius: 10px; padding: 12px 20px; font-weight: 600; font-size: 13px;
+      transform: translateY(80px); opacity: 0; transition: all .3s; pointer-events: none; z-index: 999;
+    }
+    #toast.show { transform: translateY(0); opacity: 1; }
+
+    /* ── Range display ── */
+    .range-row { display: flex; align-items: center; gap: 12px; }
+    .range-val { font-size: 13px; font-weight: 600; color: var(--accent); min-width: 40px; text-align: right; }
+
+    /* ── Toggle ── */
+    .toggle-row { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+    .toggle { width: 36px; height: 20px; background: var(--border); border-radius: 20px; position: relative; cursor: pointer; transition: background .2s; }
+    .toggle.on { background: var(--green); }
+    .toggle::after { content:''; position:absolute; top:3px; left:3px; width:14px; height:14px; border-radius:50%; background:#fff; transition: left .2s; }
+    .toggle.on::after { left: 19px; }
+
+    /* ── Plays table ── */
+    .plays-table { width:100%; border-collapse:collapse; }
+    .plays-table th {
+      font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.07em;
+      padding:12px 16px; text-align:left; font-weight:600; border-bottom:1px solid var(--border);
+      background:var(--card);
+    }
+    .plays-table td { padding:12px 16px; font-size:13px; border-bottom:1px solid var(--border); }
+    .plays-table tr:last-child td { border-bottom:none; }
+    .plays-table tr:hover td { background:rgba(255,255,255,.02); }
+    .plays-empty { text-align:center; color:var(--muted); padding:32px !important; }
+    .play-id { font-family:'Space Grotesk',sans-serif; font-size:12px; font-weight:700; color:var(--accent); letter-spacing:.08em; }
+    .status-pill { display:inline-block; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:600; }
+    .status-active    { background:#1a3020; color:var(--green); }
+    .status-completed { background:#1a2840; color:var(--blue); }
+    .pl-pos { color:var(--green); font-weight:600; }
+    .pl-neg { color:var(--red);   font-weight:600; }
+    .sc-badge { display:inline-block; background:#1a2840; color:var(--blue); border-radius:5px; padding:2px 7px; font-size:11px; font-weight:700; letter-spacing:.06em; font-family:'Space Grotesk',sans-serif; }
+    .sc-badge.normal { background:#1a1a2e; color:var(--muted); }
+
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo"><div class="logo-mark">🚚</div>Supply Rush</div>
+  <span class="badge">INSTRUCTOR DASHBOARD</span>
+</div>
+
+<div class="layout">
+  <nav class="nav">
+    <div class="nav-section">Scenarios</div>
+    <div class="nav-item active" onclick="showPage('create')">＋ Create New</div>
+    <div class="nav-item" onclick="showPage('list')">📋 My Scenarios</div>
+    <div class="nav-item" onclick="showPage('plays')">🎮 All Plays</div>
+
+  </nav>
+
+  <main class="main">
+
+    <!-- ── CREATE SCENARIO ── -->
+    <div class="page active" id="page-create">
+      <h2>Create Scenario</h2>
+      <p class="subtitle">Configure all game variables, then save to get a shareable code for students.</p>
+
+      <!-- Game Structure -->
+      <div class="card">
+        <div class="card-title">Game Structure</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Scenario Name</label>
+            <input type="text" id="sc_name" value="Spring 2025 — Week 4"/>
+          </div>
+          <div class="form-group">
+            <label>Total Quarters</label>
+            <input type="number" id="sc_quarters" value="16" min="4" max="40"/>
+          </div>
+          <div class="form-group">
+            <label>Starting Budget ($)</label>
+            <input type="number" id="sc_budget" value="3000000" step="100000"/>
+          </div>
+        </div>
+      </div>
+
+      <!-- Order Pricing -->
+      <div class="card">
+        <div class="card-title">Order Revenue</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Urgent Order Revenue ($/order)</label>
+            <input type="number" id="sc_urgent_rev" value="55" step="1"/>
+          </div>
+          <div class="form-group">
+            <label>Non-Urgent Revenue ($/order)</label>
+            <input type="number" id="sc_nonurgent_rev" value="25" step="1"/>
+          </div>
+        </div>
+      </div>
+
+      <!-- Demand -->
+      <div class="card">
+        <div class="card-title">Demand Parameters</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Min Orders / Zone / Quarter</label>
+            <input type="number" id="sc_demand_min" value="133" step="50"/>
+          </div>
+          <div class="form-group">
+            <label>Max Orders / Zone / Quarter</label>
+            <input type="number" id="sc_demand_max" value="532" step="50"/>
+          </div>
+          <div class="form-group">
+            <label>Urgent Demand Ratio</label>
+            <div class="range-row">
+              <input type="range" id="sc_urgent_ratio" min="0" max="1" step="0.05" value="0.3"
+                oninput="document.getElementById('sc_urgent_ratio_val').textContent = Math.round(this.value*100)+'%'"/>
+              <span class="range-val" id="sc_urgent_ratio_val">30%</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Zone Reveal Start Quarter</label>
+            <input type="number" id="sc_reveal_start" value="6" min="1" max="40"/>
+          </div>
+          <div class="form-group">
+            <label>Warehouse Service Radius</label>
+            <input type="number" id="sc_service_radius" value="30" min="5" max="100"/>
+          </div>
+        </div>
+      </div>
+
+      <!-- Warehouses -->
+      <div class="card">
+        <div class="card-title">Warehouse Configuration <span class="pill pill-w">3 types</span></div>
+        <table class="config-table">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Purchase Cost ($)</th>
+              <th>Capacity (orders/qtr)</th>
+              <th>Build Time (qtrs)</th>
+              <th>Sell-Back ($)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="pill pill-w">Small</span></td>
+              <td><input type="number" id="wh_small_cost" value="250000" step="10000"/></td>
+              <td><input type="number" id="wh_small_cap" value="500" step="50"/></td>
+              <td><input type="number" id="wh_small_build" value="1" min="0" max="8"/></td>
+              <td><input type="number" id="wh_small_sell" value="125000" step="10000"/></td>
+            </tr>
+            <tr>
+              <td><span class="pill pill-w">Medium</span></td>
+              <td><input type="number" id="wh_med_cost" value="500000" step="10000"/></td>
+              <td><input type="number" id="wh_med_cap" value="1200" step="50"/></td>
+              <td><input type="number" id="wh_med_build" value="1" min="0" max="8"/></td>
+              <td><input type="number" id="wh_med_sell" value="250000" step="10000"/></td>
+            </tr>
+            <tr>
+              <td><span class="pill pill-w">Large</span></td>
+              <td><input type="number" id="wh_large_cost" value="800000" step="10000"/></td>
+              <td><input type="number" id="wh_large_cap" value="2500" step="50"/></td>
+              <td><input type="number" id="wh_large_build" value="3" min="0" max="8"/></td>
+              <td><input type="number" id="wh_large_sell" value="400000" step="10000"/></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Vehicles -->
+      <div class="card">
+        <div class="card-title">Vehicle Configuration <span class="pill pill-v">2 types</span></div>
+        <table class="config-table">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Purchase ($)</th>
+              <th>Operating ($/qtr)</th>
+              <th>Capacity (orders/qtr)</th>
+              <th>Sell-Back ($)</th>
+              <th>Urgent?</th>
+              <th>Non-Urgent?</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="pill pill-v">Truck</span></td>
+              <td><input type="number" id="v_truck_cost" value="20000" step="5000"/></td>
+              <td><input type="number" id="v_truck_op" value="800" step="100"/></td>
+              <td><input type="number" id="v_truck_cap" value="200" step="10"/></td>
+              <td><input type="number" id="v_truck_sell" value="12000" step="1000"/></td>
+              <td><div class="toggle" id="v_truck_urgent" onclick="toggleEl(this)"></div></td>
+              <td><div class="toggle on" id="v_truck_nonurgent" onclick="toggleEl(this)"></div></td>
+            </tr>
+            <tr>
+              <td><span class="pill pill-v">Drone</span></td>
+              <td><input type="number" id="v_drone_cost" value="9000" step="1000"/></td>
+              <td><input type="number" id="v_drone_op" value="800" step="50"/></td>
+              <td><input type="number" id="v_drone_cap" value="60" step="5"/></td>
+              <td><input type="number" id="v_drone_sell" value="5400" step="500"/></td>
+              <td><div class="toggle on" id="v_drone_urgent" onclick="toggleEl(this)"></div></td>
+              <td><div class="toggle on" id="v_drone_nonurgent" onclick="toggleEl(this)"></div></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="createScenario()">💾 Save Scenario & Get Code</button>
+        <button class="btn btn-secondary" onclick="resetForm()">↺ Reset Defaults</button>
+      </div>
+
+      <!-- Code display (hidden until saved) -->
+      <div id="code-result" style="display:none">
+        <div class="code-box">
+          <div class="code-label">Share this code with your students</div>
+          <div class="code-value" id="generated-code">——</div>
+          <div class="code-hint">Students enter this code on the game start screen to load your scenario.</div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="copyCode()">📋 Copy Code</button>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ── SCENARIO LIST ── -->
+    <div class="page" id="page-list">
+      <h2>My Scenarios</h2>
+      <p class="subtitle">All saved scenarios. Share the code with students.</p>
+      <div class="card">
+        <div id="scenario-list-body">
+          <div style="color:var(--muted); font-size:13px; padding: 10px 0;">Loading…</div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ── ALL PLAYS ── -->
+    <div class="page" id="page-plays">
+      <h2>All Plays</h2>
+      <p class="subtitle">Every play session across all scenarios, in real time.</p>
+
+      <!-- Search & filter bar -->
+      <div class="card" style="padding: 14px 20px;">
+        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+          <div style="position:relative; flex:1; min-width:200px;">
+            <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;">🔍</span>
+            <input type="text" id="plays-search" placeholder="Search by student name, play ID, or scenario code…"
+              style="width:100%;padding-left:32px;"
+              oninput="filterPlays()"/>
+          </div>
+          <select id="plays-filter-code" onchange="filterPlays()"
+            style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;">
+            <option value="">All Scenarios</option>
+            <option value="__normal__">Normal Mode</option>
+          </select>
+          <select id="plays-filter-status" onchange="filterPlays()"
+            style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;">
+            <option value="">All Statuses</option>
+            <option value="active">In Progress</option>
+            <option value="completed">Completed</option>
+          </select>
+          <div id="plays-count" style="font-size:12px;color:var(--muted);white-space:nowrap;"></div>
+        </div>
+      </div>
+
+      <!-- Plays table -->
+      <div class="card" style="padding:0; overflow:hidden;">
+        <table class="plays-table">
+          <thead>
+            <tr>
+              <th>Play ID</th>
+              <th>Student</th>
+              <th>Scenario</th>
+              <th>Quarter</th>
+              <th>Cash</th>
+              <th>Status</th>
+              <th>Started</th>
+              <th>Last P&L</th>
+            </tr>
+          </thead>
+          <tbody id="plays-tbody">
+            <tr><td colspan="8" class="plays-empty">Loading plays…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<div id="toast">✓ Copied!</div>
+
+<script>
+  const API = "/api";
+
+  const FAKE_SCENARIOS = [
+    { id: 1, code: "RUSH42", name: "Spring 2025 — Week 4: Intro to Warehousing", quarters: 16, budget: "$3,000,000", students: 24, created: "Jun 2, 2025" },
+    { id: 2, code: "LOG7X2", name: "Fall 2025 — Advanced Demand Planning",        quarters: 20, budget: "$2,000,000", students: 18, created: "Jun 8, 2025" },
+    { id: 3, code: "SCM001", name: "Demo Scenario — Low Budget Challenge",         quarters: 12, budget: "$1,000,000", students:  6, created: "Jun 15, 2025" },
+  ];
+
+  let savedScenarios = JSON.parse(localStorage.getItem("sr_scenarios") || "null") ?? FAKE_SCENARIOS;
+
+  // ── Navigation ────────────────────────────────────────────────────────────
+  function showPage(id) {
+    document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+    document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+    document.getElementById("page-" + id).classList.add("active");
+    event.currentTarget.classList.add("active");
+    if (id === "list") renderScenarioList();
+    if (id === "plays") initPlaysPage();
+  }
+
+  // ── Toggle helper ─────────────────────────────────────────────────────────
+  function toggleEl(el) { el.classList.toggle("on"); }
+  function isOn(id) { return document.getElementById(id).classList.contains("on"); }
+
+  // ── Collect form data ─────────────────────────────────────────────────────
+  function collectForm() {
+    return {
+      name:            document.getElementById("sc_name").value,
+      total_quarters:  +document.getElementById("sc_quarters").value,
+      starting_budget: +document.getElementById("sc_budget").value,
+      urgent_order_revenue:    +document.getElementById("sc_urgent_rev").value,
+      nonurgent_order_revenue: +document.getElementById("sc_nonurgent_rev").value,
+      demand_min_per_zone:  +document.getElementById("sc_demand_min").value,
+      demand_max_per_zone:  +document.getElementById("sc_demand_max").value,
+      urgent_demand_ratio:  +document.getElementById("sc_urgent_ratio").value,
+      demand_reveal_start_quarter: +document.getElementById("sc_reveal_start").value,
+      warehouse_service_radius: +document.getElementById("sc_service_radius").value,
+      warehouse_config: {
+        small:  { purchase_cost: +document.getElementById("wh_small_cost").value,  capacity: +document.getElementById("wh_small_cap").value,  build_quarters: +document.getElementById("wh_small_build").value,  sell_back: +document.getElementById("wh_small_sell").value },
+        medium: { purchase_cost: +document.getElementById("wh_med_cost").value,    capacity: +document.getElementById("wh_med_cap").value,    build_quarters: +document.getElementById("wh_med_build").value,    sell_back: +document.getElementById("wh_med_sell").value   },
+        large:  { purchase_cost: +document.getElementById("wh_large_cost").value,  capacity: +document.getElementById("wh_large_cap").value,  build_quarters: +document.getElementById("wh_large_build").value,  sell_back: +document.getElementById("wh_large_sell").value },
+      },
+      vehicle_config: {
+        truck: { purchase_cost: +document.getElementById("v_truck_cost").value, operating_cost: +document.getElementById("v_truck_op").value, capacity: +document.getElementById("v_truck_cap").value, sell_back: +document.getElementById("v_truck_sell").value, serves_urgent: isOn("v_truck_urgent"), serves_nonurgent: isOn("v_truck_nonurgent") },
+        drone: { purchase_cost: +document.getElementById("v_drone_cost").value, operating_cost: +document.getElementById("v_drone_op").value, capacity: +document.getElementById("v_drone_cap").value, sell_back: +document.getElementById("v_drone_sell").value, serves_urgent: isOn("v_drone_urgent"), serves_nonurgent: isOn("v_drone_nonurgent") },
+      },
+      warehouse_slots: [],
+      demand_zone_positions: [],
+    };
+  }
+
+  // ── Create scenario ───────────────────────────────────────────────────────
+  async function createScenario() {
+    const payload = collectForm();
+    try {
+      const res = await fetch(`${API}/scenarios`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+
+      // Show code
+      document.getElementById("generated-code").textContent = data.code;
+      document.getElementById("code-result").style.display = "block";
+
+      // Save locally
+      savedScenarios.unshift({ code: data.code, name: data.name, id: data.id });
+      localStorage.setItem("sr_scenarios", JSON.stringify(savedScenarios));
+
+      showToast("✓ Scenario saved! Code: " + data.code);
+    } catch(e) {
+      alert("Error: " + e.message + "\n\nMake sure the backend is running at " + API);
+    }
+  }
+
+  // ── Scenario list ─────────────────────────────────────────────────────────
+  async function renderScenarioList() {
+    const el = document.getElementById("scenario-list-body");
+    if (savedScenarios.length === 0) {
+      el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:10px 0;">No scenarios yet. Create one first.</div>';
+      return;
+    }
+    el.innerHTML = savedScenarios.map(sc => `
+      <div class="scenario-row">
+        <div style="flex:1">
+          <div class="sc-name">${sc.name}</div>
+          <div class="sc-meta">${sc.quarters} quarters &nbsp;·&nbsp; ${sc.budget} budget &nbsp;·&nbsp; ${sc.students} students &nbsp;·&nbsp; Created ${sc.created}</div>
+        </div>
+        <div class="sc-code" style="margin: 0 24px">${sc.code}</div>
+        <div class="sc-actions">
+          <button class="btn btn-secondary sc-btn" onclick="copyText('${sc.code}')">📋 Copy Code</button>
+          <button class="btn btn-danger sc-btn" onclick="deleteScenario('${sc.code}', ${sc.id})">✕ Delete</button>
+        </div>
+      </div>
+    `).join("");
+  }
+
+  async function deleteScenario(code, id) {
+    if (!confirm(`Delete scenario ${code}?`)) return;
+    try {
+      await fetch(`${API}/scenarios/${code}`, { method: "DELETE" });
+      savedScenarios = savedScenarios.filter(s => s.id !== id);
+      localStorage.setItem("sr_scenarios", JSON.stringify(savedScenarios));
+      renderScenarioList();
+      showToast("Scenario deleted");
+    } catch(e) { alert("Error: " + e.message); }
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function copyCode() { copyText(document.getElementById("generated-code").textContent); }
+  function copyText(t) { navigator.clipboard.writeText(t); showToast("✓ Copied: " + t); }
+
+  function showToast(msg) {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    setTimeout(() => t.classList.remove("show"), 2500);
+  }
+
+
+  // ── Plays page ────────────────────────────────────────────────────────────
+  let allPlays = [];
+  let filteredPlays = [];
+
+  function fmt$(n) { return "$" + Math.abs(n).toLocaleString(); }
+  function fmtDate(s) {
+    const d = new Date(s);
+    return d.toLocaleDateString("en-US", {month:"short", day:"numeric"}) + " " +
+           d.toLocaleTimeString("en-US", {hour:"2-digit", minute:"2-digit"});
+  }
+  function lastProfit(play) {
+    const r = play.quarterly_results;
+    return r.length ? r[r.length-1].profit : null;
+  }
+
+  function populateScenarioFilter() {
+    const sel = document.getElementById("plays-filter-code");
+    const codes = [...new Set(allPlays.filter(p => p.scenario_code).map(p => p.scenario_code))];
+    codes.forEach(c => {
+      if (!sel.querySelector(`option[value="${c}"]`)) {
+        const o = document.createElement("option");
+        o.value = c; o.textContent = c;
+        sel.appendChild(o);
+      }
+    });
+  }
+
+  function filterPlays() {
+    const search = document.getElementById("plays-search").value.toLowerCase();
+    const code   = document.getElementById("plays-filter-code").value;
+    const status = document.getElementById("plays-filter-status").value;
+
+    filteredPlays = allPlays.filter(p => {
+      if (code === "__normal__" && p.scenario_code !== null) return false;
+      if (code && code !== "__normal__" && p.scenario_code !== code) return false;
+      if (status === "active"    &&  p.completed) return false;
+      if (status === "completed" && !p.completed) return false;
+      if (search) {
+        const haystack = [p.play_id, p.student_name||"", p.scenario_code||""].join(" ").toLowerCase();
+        if (!haystack.includes(search)) return false;
+      }
+      return true;
+    });
+    renderPlaysTable();
+  }
+
+  function renderPlaysTable() {
+    const tbody = document.getElementById("plays-tbody");
+    document.getElementById("plays-count").textContent =
+      filteredPlays.length + " of " + allPlays.length + " plays";
+
+    if (filteredPlays.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" class="plays-empty">No plays match your filters.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = filteredPlays.map(p => {
+      const lp = lastProfit(p);
+      const plHtml = lp === null ? '<span style="color:var(--muted)">—</span>'
+        : `<span class="${lp >= 0 ? "pl-pos" : "pl-neg"}">${lp >= 0 ? "+" : "−"}${fmt$(lp)}</span>`;
+
+      const scHtml = p.scenario_code
+        ? `<span class="sc-badge">${p.scenario_code}</span>`
+        : `<span class="sc-badge normal">Normal</span>`;
+
+      const statusHtml = p.completed
+        ? '<span class="status-pill status-completed">Completed</span>'
+        : '<span class="status-pill status-active">In Progress</span>';
+
+      const qBar = `Q${p.current_quarter}/${p.total_quarters}`;
+
+      return `<tr>
+        <td><span class="play-id">${p.play_id}</span></td>
+        <td>${p.student_name || '<span style="color:var(--muted)">Anonymous</span>'}</td>
+        <td>${scHtml}</td>
+        <td style="color:var(--muted)">${qBar}</td>
+        <td style="font-weight:600">${fmt$(p.cash)}</td>
+        <td>${statusHtml}</td>
+        <td style="color:var(--muted);font-size:12px">${fmtDate(p.started_at)}</td>
+        <td>${plHtml}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  async function initPlaysPage() {
+    const tbody = document.getElementById("plays-tbody");
+    tbody.innerHTML = '<tr><td colspan="8" class="plays-empty">Loading plays…</td></tr>';
+    try {
+      const res = await fetch(`${API}/plays`);
+      if (!res.ok) throw new Error(await res.text());
+      allPlays = await res.json();
+      populateScenarioFilter();
+      filterPlays();
+    } catch (e) {
+      tbody.innerHTML = '<tr><td colspan="8" class="plays-empty">Couldn\'t load plays. Make sure the backend is running at ' + API + '</td></tr>';
+      console.error("[Supply Rush] Failed to load /plays:", e);
+    }
+  }
+
+  function resetForm() {
+    document.getElementById("sc_name").value = "Untitled Scenario";
+    document.getElementById("sc_quarters").value = "16";
+    document.getElementById("sc_budget").value = "3000000";
+    document.getElementById("sc_urgent_rev").value = "55";
+    document.getElementById("sc_nonurgent_rev").value = "25";
+    document.getElementById("sc_demand_min").value = "133";
+    document.getElementById("sc_demand_max").value = "532";
+    document.getElementById("sc_urgent_ratio").value = "0.3";
+    document.getElementById("sc_urgent_ratio_val").textContent = "30%";
+    document.getElementById("sc_reveal_start").value = "6";
+    document.getElementById("sc_service_radius").value = "30";
+    document.getElementById("code-result").style.display = "none";
+  }
+</script>
+</body>
+</html>
