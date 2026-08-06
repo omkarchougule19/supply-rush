@@ -98,6 +98,50 @@
         radial-gradient(ellipse 70% 65% at 50% 46%, rgba(96,200,255,.05), transparent 70%),
         radial-gradient(ellipse 90% 80% at 50% 50%, #0c1526, var(--bg) 75%); }
     .map-wrap.map-contain { display:flex; align-items:center; justify-content:center; overflow:hidden; }
+    .map-scale {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      z-index: 10;
+      background: rgba(12, 21, 38, 0.72);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 210, 74, 0.16);
+      border-radius: 8px;
+      padding: 10px 14px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+      pointer-events: none;
+    }
+    .map-scale-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #e2e8f5;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      font-family: 'Space Grotesk', sans-serif;
+    }
+    .map-scale-line-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 8px;
+    }
+    .map-scale-line {
+      height: 2px;
+      background: var(--accent);
+      position: relative;
+    }
+    .map-scale-line::before, .map-scale-line::after {
+      content: '';
+      position: absolute;
+      top: -3px;
+      width: 2px;
+      height: 8px;
+      background: var(--accent);
+    }
+    .map-scale-line::before { left: 0; }
+    .map-scale-line::after { right: 0; }
     .map-backdrop { position:absolute; inset:0; z-index:0; pointer-events:none;
       background-size:cover; background-position:center;
       filter: blur(42px) brightness(.5) saturate(1.15);
@@ -311,6 +355,12 @@
     </div>
     <div class="map-wrap" id="mapWrap">
       <div class="map-backdrop" id="mapBackdrop"></div>
+      <div class="map-scale" id="mapScale">
+        <div class="map-scale-label" id="mapScaleLabel">Service Radius: 30 km / miles</div>
+        <div class="map-scale-line-container">
+          <div class="map-scale-line" id="mapScaleLine"></div>
+        </div>
+      </div>
       <div class="map-content" id="mapContent">
         <img class="map-bg" id="mapImage" alt="Chicago map"/>
         <svg class="map-overlay" id="roadOverlay" xmlns="http://www.w3.org/2000/svg"></svg>
@@ -618,6 +668,16 @@ function sizeMap() {
   renderSlots();
   renderDemandSpots();
   renderRoutes();
+
+  var scaleLine = document.getElementById("mapScaleLine");
+  if (scaleLine) {
+    var scaleWidth = Math.round(W * (MAX_ROUTE_DISTANCE / 100));
+    scaleLine.style.width = scaleWidth + "px";
+  }
+  var scaleLabel = document.getElementById("mapScaleLabel");
+  if (scaleLabel) {
+    scaleLabel.textContent = "Service Radius: " + MAX_ROUTE_DISTANCE + " km / miles";
+  }
 }
 
 window.addEventListener("resize", function(){
