@@ -139,35 +139,13 @@ def generate_demand(
     demand_max: int,
     urgent_ratio: float,
     quarter: int,
+    total_quarters: int = 16,
     seed: int = None,
 ) -> Dict:
     """
-    Generate demand for the quarter, with PERMANENT zone activation: once a
-    zone has produced demand in some quarter, it keeps producing demand every
-    quarter after that for the rest of the game — it never goes quiet again,
-    and it never moves. New zones can still be activated on top of the
-    already-active set as the game progresses, so the active set only ever
-    grows (until it saturates the full revealed pool).
-
-    `activated_urgent`/`activated_nonurgent` are lists of {id, x, y} for
-    zones already locked in as of the previous quarter (empty for a fresh
-    game). Each zone's jittered x/y is computed ONCE, the first quarter it
-    activates, and reused every quarter after that — only the order COUNT
-    varies quarter to quarter, never the position. (Previously the jitter
-    was recomputed on every call even for already-active zones, making the
-    same zone appear to drift slightly each quarter.)
-    Urgent and non-urgent spots are always drawn from disjoint zone sets so
-    they never appear as paired dots on the map.
-
-    Returns:
-        {
-          "urgent":              [{zone_id, x, y, orders}, ...],
-          "nonurgent":           [{zone_id, x, y, orders}, ...],
-          "activated_urgent":    [{id, x, y}, ...],  # updated, carry into next quarter
-          "activated_nonurgent": [{id, x, y}, ...],  # updated, carry into next quarter
-        }
-    Frontend renders urgent as red pulsing dots and nonurgent as blue pulsing dots,
-    independently positioned across the map.
+    Generate demand for the quarter, with milestone-based activation for the subset
+    of zones that would otherwise never activate due to the 90% cap (bringing all
+    revealed zones to active status by 75% game progress).
     """
     if seed is not None:
         random.seed(seed)
@@ -176,39 +154,70 @@ def generate_demand(
     by_id = {z["id"]: z for z in pool}
     n     = len(pool)
 
-    # Carry forward already-activated zones with their FIXED positions (only
-    # keep ones still present in the revealed pool, always true in practice
-    # since revealed zones never get un-revealed).
+    # 1. Stably identify the subset of never-activated zones (up to the 10% cap)
+    sorted_pool = sorted(pool, key=lambda z: z["id"])
+    u_count = n - int(n * 0.9)
+    never_active_zones = sorted_pool[-u_count:] if u_count > 0 else []
+    never_active_ids = {z["id"] for z in never_active_zones}
+
+    # 2. Determine target number of never-activated zones based on progress milestones
+    progress = quarter / total_quarters
+    if progress >= 0.75:
+        target_never_active = u_count
+    elif progress >= 0.5:
+        target_never_active = int(u_count * 0.75 + 0.5)  # 25% + 50% = 75% cumulative
+    elif progress >= 0.25:
+        target_never_active = int(u_count * 0.25 + 0.5)  # 25% cumulative
+    else:
+        target_never_active = 0
+
+    # 3. Carry forward already-activated zones
     urgent_active    = [z for z in activated_urgent    if z["id"] in by_id]
     nonurgent_active = [z for z in activated_nonurgent if z["id"] in by_id]
     already_active_ids = {z["id"] for z in urgent_active} | {z["id"] for z in nonurgent_active}
 
-    candidates = [z for z in pool if z["id"] not in already_active_ids]
+    # 4. Separate normal candidates and never-active zones
+    normal_candidates = [z for z in pool if z["id"] not in already_active_ids and z["id"] not in never_active_ids]
+    active_normal_ids = already_active_ids - never_active_ids
 
-    # How many zones should be active in total this quarter — grows toward
-    # saturating the revealed pool, same growth curve as before but now
-    # applied on top of what's already locked in rather than redrawn fresh.
-    total_spots = max(2, int(n * random.uniform(0.5, 0.9)))
-    new_spots_needed = max(0, min(total_spots - len(already_active_ids), len(candidates)))
+    # 5. Sample normal spots (capped at 90% of normal pool)
+    n_normal = n - u_count
+    total_normal_spots = max(2, int(n_normal * random.uniform(0.5, 0.9)))
+    new_normal_spots_needed = max(0, min(total_normal_spots - len(active_normal_ids), len(normal_candidates)))
 
-    new_urgent_count = min(round(new_spots_needed * urgent_ratio), len(candidates))
-    new_urgent_zones = random.sample(candidates, new_urgent_count) if new_urgent_count > 0 else []
+    new_urgent_count = min(round(new_normal_spots_needed * urgent_ratio), len(normal_candidates))
+    new_urgent_zones = random.sample(normal_candidates, new_urgent_count) if new_urgent_count > 0 else []
     used_ids = {z["id"] for z in new_urgent_zones}
-    remaining_candidates = [z for z in candidates if z["id"] not in used_ids]
+    remaining_candidates = [z for z in normal_candidates if z["id"] not in used_ids]
 
-    new_nonurgent_count = min(new_spots_needed - new_urgent_count, len(remaining_candidates))
+    new_nonurgent_count = min(new_normal_spots_needed - new_urgent_count, len(remaining_candidates))
     new_nonurgent_zones = random.sample(remaining_candidates, new_nonurgent_count) if new_nonurgent_count > 0 else []
 
     def fix_position(zone):
-        # Jitter computed ONCE at activation time, then reused forever.
         return {
             "id": zone["id"],
             "x":  round(zone["x"] + random.uniform(-1.2, 1.2), 2),
             "y":  round(zone["y"] + random.uniform(-1.2, 1.2), 2),
         }
 
+    # Add newly activated normal zones
     urgent_active    = urgent_active    + [fix_position(z) for z in new_urgent_zones]
     nonurgent_active = nonurgent_active + [fix_position(z) for z in new_nonurgent_zones]
+
+    # 6. Ensure target count of never-active zones are activated
+    active_never_zones = [z for z in never_active_zones if z["id"] in already_active_ids]
+    active_never_ids = {z["id"] for z in active_never_zones}
+    never_zones_to_activate = [z for z in never_active_zones if z["id"] not in active_never_ids]
+    never_zones_needed = max(0, target_never_active - len(active_never_ids))
+
+    if never_zones_needed > 0:
+        new_never_zones = never_zones_to_activate[:never_zones_needed]
+        new_never_urgent_count = round(never_zones_needed * urgent_ratio)
+        new_never_urgent = new_never_zones[:new_never_urgent_count]
+        new_never_nonurgent = new_never_zones[new_never_urgent_count:]
+
+        urgent_active = urgent_active + [fix_position(z) for z in new_never_urgent]
+        nonurgent_active = nonurgent_active + [fix_position(z) for z in new_never_nonurgent]
 
     def make_spot(fixed_zone, spot_type):
         return {
@@ -377,16 +386,29 @@ def simulate_quarter(
     for wh in warehouses:
         if wh.is_sold or not wh.is_active:
             continue
-        caps    = get_warehouse_vehicle_capacity(wh.vehicles, vehicle_config)
+        
+        # Parse vehicles and their individual stats
+        wh_vehicles = []
+        vehicles_list = json.loads(wh.vehicles)
+        for v in vehicles_list:
+            if v.get("is_sold"):
+                continue
+            v_cfg = vehicle_config.get(v["type"], {})
+            wh_vehicles.append({
+                "type":             v["type"],
+                "capacity":         v_cfg.get("capacity", 0),
+                "serves_urgent":    v_cfg.get("serves_urgent", False),
+                "serves_nonurgent": v_cfg.get("serves_nonurgent", False),
+                "used":             0
+            })
+
         wh_cfg  = warehouse_config.get(wh.warehouse_type, {})
         active_warehouses.append({
             "id":                      wh.id,
             "slot_id":                 wh.slot_id,
             "warehouse_type":          wh.warehouse_type,
             "max_capacity":            wh_cfg.get("capacity", 0),
-            "dedicated_urgent_left":   caps["dedicated_urgent"],
-            "dedicated_nonurgent_left": caps["dedicated_nonurgent"],
-            "flexible_left":           caps["flexible"],
+            "vehicles":                wh_vehicles,
             "orders_handled":          0,
         })
 
@@ -399,62 +421,100 @@ def simulate_quarter(
     remaining_urgent    = total_urgent
     remaining_nonurgent = total_nonurgent
 
+    # Phase 1: Dedicated-urgent vehicles serve urgent first
     for wh in active_warehouses:
-        # Dedicated-urgent vehicles serve urgent first
-        can_u = min(wh["dedicated_urgent_left"], remaining_urgent)
-        fulfilled_urgent    += can_u
-        remaining_urgent    -= can_u
-        wh["orders_handled"] += can_u
+        for v in wh["vehicles"]:
+            if v["serves_urgent"] and not v["serves_nonurgent"]:
+                can_u = min(v["capacity"] - v["used"], remaining_urgent)
+                v["used"]            += can_u
+                remaining_urgent     -= can_u
+                wh["orders_handled"] += can_u
+                fulfilled_urgent     += can_u
 
-        # Dedicated-nonurgent vehicles serve nonurgent
-        can_n = min(wh["dedicated_nonurgent_left"], remaining_nonurgent)
-        fulfilled_nonurgent    += can_n
-        remaining_nonurgent    -= can_n
-        wh["orders_handled"]   += can_n
+    # Phase 2: Dedicated-nonurgent vehicles serve nonurgent
+    for wh in active_warehouses:
+        for v in wh["vehicles"]:
+            if not v["serves_urgent"] and v["serves_nonurgent"]:
+                can_n = min(v["capacity"] - v["used"], remaining_nonurgent)
+                v["used"]            += can_n
+                remaining_nonurgent  -= can_n
+                wh["orders_handled"] += can_n
+                fulfilled_nonurgent  += can_n
 
-        # Flexible (dual-purpose) capacity is ONE shared pool — prioritize
-        # urgent demand first (higher value per order), then whatever's left
-        # goes to nonurgent. A vehicle's capacity is spent once, not twice.
-        flex = wh["flexible_left"]
-        can_fu = min(flex, remaining_urgent)
-        fulfilled_urgent    += can_fu
-        remaining_urgent    -= can_fu
-        wh["orders_handled"] += can_fu
-        flex -= can_fu
+    # Phase 3: Flexible (both) vehicles serve urgent first, then nonurgent
+    for wh in active_warehouses:
+        for v in wh["vehicles"]:
+            if v["serves_urgent"] and v["serves_nonurgent"]:
+                # first urgent
+                can_fu = min(v["capacity"] - v["used"], remaining_urgent)
+                v["used"]            += can_fu
+                remaining_urgent     -= can_fu
+                wh["orders_handled"] += can_fu
+                fulfilled_urgent     += can_fu
+                
+                # then nonurgent
+                can_fn = min(v["capacity"] - v["used"], remaining_nonurgent)
+                v["used"]            += can_fn
+                remaining_nonurgent  -= can_fn
+                wh["orders_handled"] += can_fn
+                fulfilled_nonurgent  += can_fn
 
-        can_fn = min(flex, remaining_nonurgent)
-        fulfilled_nonurgent    += can_fn
-        remaining_nonurgent    -= can_fn
-        wh["orders_handled"]   += can_fn
+    # Calculate overall financials and metrics
+    urgent_revenue_total    = fulfilled_urgent * urgent_revenue
+    nonurgent_revenue_total = fulfilled_nonurgent * nonurgent_revenue
+    revenue                 = urgent_revenue_total + nonurgent_revenue_total
 
-    revenue       = fulfilled_urgent * urgent_revenue + fulfilled_nonurgent * nonurgent_revenue
     operating_cost = sum(
         get_vehicle_operating_cost(wh.vehicles, vehicle_config)
         for wh in warehouses
         if not wh.is_sold and wh.is_active
     )
-    total_fulfilled       = fulfilled_urgent + fulfilled_nonurgent
-    total_vehicle_capacity = sum(
-        wh["dedicated_urgent_left"] + wh["dedicated_nonurgent_left"] + wh["flexible_left"]
-        for wh in active_warehouses
-    )
-    utilization_rate = (total_fulfilled / total_vehicle_capacity) if total_vehicle_capacity > 0 else 0.0
-    serving_pct      = (total_fulfilled / total_demand)           if total_demand > 0           else 0.0
-    profit           = revenue - operating_cost
+    total_fulfilled = fulfilled_urgent + fulfilled_nonurgent
+    
+    # Calculate vehicle capacities and usages by type
+    capacity_by_type = {}
+    used_by_type = {}
+    for wh in active_warehouses:
+        for v in wh["vehicles"]:
+            vtype = v["type"]
+            capacity_by_type[vtype] = capacity_by_type.get(vtype, 0) + v["capacity"]
+            used_by_type[vtype]     = used_by_type.get(vtype, 0) + v["used"]
+
+    total_vehicle_capacity = sum(capacity_by_type.values())
+    utilization_rate       = (total_fulfilled / total_vehicle_capacity) if total_vehicle_capacity > 0 else 0.0
+    serving_pct            = (total_fulfilled / total_demand)           if total_demand > 0           else 0.0
+    profit                 = revenue - operating_cost
+
+    drone_capacity    = capacity_by_type.get("drone", 0)
+    drone_used        = used_by_type.get("drone", 0)
+    drone_utilization = (drone_used / drone_capacity) if drone_capacity > 0 else 0.0
+
+    truck_capacity    = capacity_by_type.get("truck", 0)
+    truck_used        = used_by_type.get("truck", 0)
+    truck_utilization = (truck_used / truck_capacity) if truck_capacity > 0 else 0.0
+
+    urgent_stockouts    = total_urgent - fulfilled_urgent
+    nonurgent_stockouts = total_nonurgent - fulfilled_nonurgent
 
     return {
-        "revenue":           round(revenue, 2),
-        "operating_cost":    round(operating_cost, 2),
-        "profit":            round(profit, 2),
-        "orders_fulfilled":  total_fulfilled,
-        "orders_total":      total_demand,
+        "revenue":             round(revenue, 2),
+        "urgent_revenue":      round(urgent_revenue_total, 2),
+        "nonurgent_revenue":   round(nonurgent_revenue_total, 2),
+        "operating_cost":      round(operating_cost, 2),
+        "profit":              round(profit, 2),
+        "orders_fulfilled":    total_fulfilled,
+        "orders_total":        total_demand,
         "urgent_fulfilled":    fulfilled_urgent,
         "urgent_total":        total_urgent,
         "nonurgent_fulfilled": fulfilled_nonurgent,
         "nonurgent_total":     total_nonurgent,
-        "utilization_rate":  round(min(utilization_rate, 1.0), 4),
-        "serving_pct":       round(min(serving_pct, 1.0), 4),
-        "stockouts":         total_demand - total_fulfilled,
+        "utilization_rate":    round(min(utilization_rate, 1.0), 4),
+        "drone_utilization":   round(min(drone_utilization, 1.0), 4),
+        "truck_utilization":   round(min(truck_utilization, 1.0), 4),
+        "serving_pct":         round(min(serving_pct, 1.0), 4),
+        "stockouts":           total_demand - total_fulfilled,
+        "urgent_stockouts":    urgent_stockouts,
+        "nonurgent_stockouts": nonurgent_stockouts,
         "warehouse_breakdown": [
             {"slot_id": wh["slot_id"], "orders_handled": wh["orders_handled"]}
             for wh in active_warehouses

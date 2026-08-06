@@ -42,8 +42,8 @@ class ScenarioCreate(BaseModel):
 
     warehouse_config: Dict[str, WarehouseTypeConfig] = {
         "small":  WarehouseTypeConfig(purchase_cost=250_000, capacity=500,  build_quarters=1, sell_back=125_000),
-        "medium": WarehouseTypeConfig(purchase_cost=500_000, capacity=1200, build_quarters=1, sell_back=250_000),
-        "large":  WarehouseTypeConfig(purchase_cost=800_000, capacity=2500, build_quarters=3, sell_back=400_000),
+        "medium": WarehouseTypeConfig(purchase_cost=500_000, capacity=1200, build_quarters=2, sell_back=250_000),
+        "large":  WarehouseTypeConfig(purchase_cost=800_000, capacity=2500, build_quarters=4, sell_back=400_000),
     }
 
     vehicle_config: Dict[str, VehicleTypeConfig] = {

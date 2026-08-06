@@ -305,7 +305,7 @@ def place_warehouse(play_id: str, payload: PlaceWarehouseRequest, db: Session = 
     db.refresh(wh)
     # "Next run" means: the Q0->Q1 transition if still in setup, otherwise
     # the next real quarter about to be simulated.
-    next_run_reference = 1 if play.current_quarter == 0 else play.current_quarter + 1
+    next_run_reference = 1 if play.current_quarter == 0 else play.current_quarter
     active_from = wh.built_at_quarter + cfg["build_quarters"]
     return {
         "warehouse_id":         wh.id,
@@ -443,6 +443,7 @@ def get_warehouses(play_id: str, db: Session = Depends(get_db)):
     play = _get_play_or_404(play_id, db)
     sc   = play.scenario
     wh_cfg = json.loads(sc.warehouse_config)
+    ref_quarter = 1 if play.current_quarter == 0 else play.current_quarter
     return [
         {
             "id":                  wh.id,
@@ -454,6 +455,7 @@ def get_warehouses(play_id: str, db: Session = Depends(get_db)):
             "vehicles":            json.loads(wh.vehicles),
             "vehicle_counts":      count_vehicles(wh.vehicles),
             "quarters_until_active": quarters_until_active(wh, wh_cfg, play.current_quarter),
+            "activates_next_run":    (not wh.is_active) and quarters_until_active(wh, wh_cfg, ref_quarter) == 0,
         }
         for wh in play.warehouses if not wh.is_sold
     ]
@@ -496,6 +498,7 @@ def get_demand(play_id: str, db: Session = Depends(get_db)):
             demand_max=sc.demand_max_per_zone,
             urgent_ratio=sc.urgent_demand_ratio,
             quarter=play.current_quarter,
+            total_quarters=sc.total_quarters,
             seed=seed,
         )
     return {"quarter": play.current_quarter, "demand_zones": demand, "revealed_zones": revealed}
@@ -551,7 +554,7 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
                 "is_sold":               wh.is_sold,
                 "built_at_quarter":      wh.built_at_quarter,
                 "quarters_until_active": quarters_until_active(wh, wh_cfg, 1),
-                "activates_next_run":    (not wh.is_active) and quarters_until_active(wh, wh_cfg, 2) == 0,
+                "activates_next_run":    (not wh.is_active) and quarters_until_active(wh, wh_cfg, 1) == 0,
                 "vehicle_counts":        count_vehicles(wh.vehicles),
                 "vehicles":              json.loads(wh.vehicles),
             }
@@ -588,6 +591,7 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
         demand_max=sc.demand_max_per_zone,
         urgent_ratio=sc.urgent_demand_ratio,
         quarter=ran_quarter,
+        total_quarters=sc.total_quarters,
         seed=seed,
     )
     # Persist the (now possibly larger) set of permanently-activated zones
@@ -621,30 +625,44 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
         quarter=ran_quarter,
         demand_snapshot=json.dumps(demand_flat),
         revenue=result["revenue"],
+        urgent_revenue=result["urgent_revenue"],
+        nonurgent_revenue=result["nonurgent_revenue"],
         operating_cost=result["operating_cost"],
         profit=result["profit"],
         cash_after=play.cash,
         orders_fulfilled=result["orders_fulfilled"],
         orders_total=result["orders_total"],
         utilization_rate=result["utilization_rate"],
+        drone_utilization=result["drone_utilization"],
+        truck_utilization=result["truck_utilization"],
         serving_pct=result["serving_pct"],
         stockouts=result["stockouts"],
+        urgent_stockouts=result["urgent_stockouts"],
+        nonurgent_stockouts=result["nonurgent_stockouts"],
     )
     db.add(qr)
 
     # Mirror into Play.quarterly_results JSON
     qr_list = json.loads(play.quarterly_results)
     qr_list.append({
-        "quarter":          ran_quarter,
-        "revenue":          result["revenue"],
-        "operating_cost":   result["operating_cost"],
-        "profit":           result["profit"],
-        "cash_after":       play.cash,
-        "orders_fulfilled": result["orders_fulfilled"],
-        "orders_total":     result["orders_total"],
-        "utilization_rate": result["utilization_rate"],
-        "serving_pct":      result["serving_pct"],
-        "stockouts":        result["stockouts"],
+        "quarter":             ran_quarter,
+        "revenue":             result["revenue"],
+        "urgent_revenue":      result["urgent_revenue"],
+        "nonurgent_revenue":   result["nonurgent_revenue"],
+        "operating_cost":      result["operating_cost"],
+        "profit":              result["profit"],
+        "cash_after":          play.cash,
+        "orders_fulfilled":    result["orders_fulfilled"],
+        "orders_total":        result["orders_total"],
+        "utilization_rate":    result["utilization_rate"],
+        "drone_utilization":   result["drone_utilization"],
+        "truck_utilization":   result["truck_utilization"],
+        "serving_pct":         result["serving_pct"],
+        "stockouts":           result["stockouts"],
+        "urgent_stockouts":    result["urgent_stockouts"],
+        "nonurgent_stockouts": result["nonurgent_stockouts"],
+        "urgent_fulfilled":    result["urgent_fulfilled"],
+        "nonurgent_fulfilled": result["nonurgent_fulfilled"],
     })
     play.quarterly_results = json.dumps(qr_list)
 
@@ -653,6 +671,7 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
         play.completed = True
     else:
         play.current_quarter = ran_quarter + 1
+        advance_warehouse_builds(play.warehouses, ran_quarter + 1, wh_cfg)
 
     db.commit()
 

@@ -27,8 +27,8 @@ class Scenario(Base):
     # ── Warehouse costs & specs ───────────────────────────────────────────────
     warehouse_config = Column(Text, default=json.dumps({
         "small":  {"purchase_cost": 250_000, "capacity": 500,  "build_quarters": 1, "sell_back": 125_000},
-        "medium": {"purchase_cost": 500_000, "capacity": 1200, "build_quarters": 1, "sell_back": 250_000},
-        "large":  {"purchase_cost": 800_000, "capacity": 2500, "build_quarters": 3, "sell_back": 400_000},
+        "medium": {"purchase_cost": 500_000, "capacity": 1200, "build_quarters": 2, "sell_back": 250_000},
+        "large":  {"purchase_cost": 800_000, "capacity": 2500, "build_quarters": 4, "sell_back": 400_000},
     }))
 
     # ── Vehicle costs & specs ─────────────────────────────────────────────────
@@ -157,16 +157,22 @@ class QuarterResult(Base):
     demand_snapshot = Column(Text, default=json.dumps([]))
 
     # Financials
-    revenue        = Column(Float, default=0.0)
-    operating_cost = Column(Float, default=0.0)
-    profit         = Column(Float, default=0.0)
-    cash_after     = Column(Float, default=0.0)
+    revenue             = Column(Float, default=0.0)
+    urgent_revenue      = Column(Float, default=0.0)
+    nonurgent_revenue   = Column(Float, default=0.0)
+    operating_cost      = Column(Float, default=0.0)
+    profit              = Column(Float, default=0.0)
+    cash_after          = Column(Float, default=0.0)
 
     # KPIs
-    orders_fulfilled = Column(Integer, default=0)
-    orders_total     = Column(Integer, default=0)
-    utilization_rate = Column(Float,   default=0.0)  # 0–1
-    serving_pct      = Column(Float,   default=0.0)  # 0–1
-    stockouts        = Column(Integer, default=0)
+    orders_fulfilled    = Column(Integer, default=0)
+    orders_total        = Column(Integer, default=0)
+    utilization_rate    = Column(Float,   default=0.0)  # 0–1
+    drone_utilization   = Column(Float,   default=0.0)  # 0–1
+    truck_utilization   = Column(Float,   default=0.0)  # 0–1
+    serving_pct         = Column(Float,   default=0.0)  # 0–1
+    stockouts           = Column(Integer, default=0)
+    urgent_stockouts    = Column(Integer, default=0)
+    nonurgent_stockouts = Column(Integer, default=0)
 
     play = relationship("Play", back_populates="quarters")

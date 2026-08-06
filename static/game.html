@@ -195,7 +195,7 @@
 
     #results-overlay { position:fixed; inset:0; background:rgba(7,13,24,.78); z-index:80; display:none; align-items:center; justify-content:center; }
     #results-overlay.show { display:flex; }
-    .results-box { width:480px; background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:32px 30px; }
+    .results-box { width:540px; background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:32px 30px; }
     .results-title { font-family:'Space Grotesk',sans-serif; font-size:20px; font-weight:700; margin-bottom:4px; }
     .results-sub { font-size:13px; color:var(--muted); margin-bottom:22px; }
     .r-activated-callout { display:flex; align-items:center; gap:10px; background:rgba(255,210,74,.1); border:1px solid rgba(255,210,74,.35); border-radius:10px; padding:11px 14px; margin:-8px 0 20px; font-size:13px; font-weight:600; color:var(--accent); }
@@ -210,9 +210,9 @@
     .results-next-btn { width:100%; padding:13px; background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#0a1220; border:none; border-radius:10px; font-size:15px; font-weight:700; font-family:'Space Grotesk',sans-serif; cursor:pointer; }
 
     /* GAME OVER */
-    #gameover-overlay { position:fixed; inset:0; background:rgba(7,13,24,.92); z-index:90; display:none; align-items:center; justify-content:center; }
+    #gameover-overlay { position:fixed; inset:0; background:rgba(7,13,24,.92); z-index:90; display:none; align-items:center; justify-content:center; overflow-y:auto; padding:24px 0; }
     #gameover-overlay.show { display:flex; }
-    .gameover-box { width:500px; background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:40px 36px; text-align:center; }
+    .gameover-box { width:620px; max-height:calc(100vh - 48px); overflow-y:auto; background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:40px 36px; text-align:center; }
     .gameover-icon { font-size:52px; margin-bottom:14px; }
     .gameover-title { font-family:'Space Grotesk',sans-serif; font-size:26px; font-weight:700; color:var(--accent); margin-bottom:8px; }
     .gameover-sub { font-size:14px; color:var(--muted); margin-bottom:28px; }
@@ -220,8 +220,13 @@
     .go-stat { background:var(--card); border-radius:10px; padding:14px; }
     .go-label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:4px; }
     .go-val { font-size:18px; font-weight:700; }
+    .go-charts { display:flex; flex-direction:column; gap:20px; margin-bottom:28px; }
+    .go-chart-card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:18px 20px; text-align:left; }
+    .go-chart-title { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:12px; font-weight:600; }
+    .go-chart-card canvas { width:100% !important; height:180px !important; }
     .gameover-btn { padding:13px 32px; background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#0a1220; border:none; border-radius:10px; font-size:14px; font-weight:700; font-family:'Space Grotesk',sans-serif; cursor:pointer; }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -371,6 +376,20 @@
     <div class="gameover-title">Game Complete!</div>
     <div class="gameover-sub" id="go-sub"></div>
     <div class="gameover-stats" id="go-stats"></div>
+    <div class="go-charts">
+      <div class="go-chart-card">
+        <div class="go-chart-title">Fleet Utilization Over Time</div>
+        <canvas id="chart-utilization"></canvas>
+      </div>
+      <div class="go-chart-card">
+        <div class="go-chart-title">Revenue Per Quarter</div>
+        <canvas id="chart-revenue"></canvas>
+      </div>
+      <div class="go-chart-card">
+        <div class="go-chart-title">Orders Delivered — Urgent vs Non-Urgent</div>
+        <canvas id="chart-orders"></canvas>
+      </div>
+    </div>
     <button class="gameover-btn" onclick="location.reload()">Play Again</button>
   </div>
 </div>
@@ -1450,7 +1469,12 @@ function runQuarter() {
 
     state.quarterlyResults.push({quarter:q, profit:result.profit, revenue:result.revenue,
       operating_cost:result.operating_cost, cash_after:result.cash_after,
-      utilization_rate:result.utilization_rate, serving_pct:result.serving_pct, stockouts:result.stockouts});
+      utilization_rate:result.utilization_rate, serving_pct:result.serving_pct, stockouts:result.stockouts,
+      orders_fulfilled:result.orders_fulfilled, orders_total:result.orders_total,
+      urgent_revenue:result.urgent_revenue, nonurgent_revenue:result.nonurgent_revenue,
+      drone_utilization:result.drone_utilization, truck_utilization:result.truck_utilization,
+      urgent_stockouts:result.urgent_stockouts, nonurgent_stockouts:result.nonurgent_stockouts,
+      urgent_fulfilled:result.urgent_fulfilled||0, nonurgent_fulfilled:result.nonurgent_fulfilled||0});
     updateHUD(); updateSidebar();
     showResults(q, result, newlyActivated);
   }
@@ -1460,7 +1484,8 @@ function runQuarter() {
       var setupPendingCost = computePendingVehicleNetCost(state.demoPendingDeltas||{}, state.scenario.vehicle_config);
       pendingResult = {revenue:0, operating_cost:0, profit:0, orders_fulfilled:0, orders_total:0,
         utilization_rate:0, serving_pct:0, stockouts:0, cash_after: state.cash-setupPendingCost,
-        completed:false, next_quarter:1, quarter:0};
+        completed:false, next_quarter:1, quarter:0,
+        urgent_revenue:0, nonurgent_revenue:0, drone_utilization:0, truck_utilization:0, urgent_stockouts:0, nonurgent_stockouts:0};
     } else {
       pendingResult = localSim();
     }
@@ -1478,30 +1503,108 @@ function runQuarter() {
 }
 
 function localSim() {
-  var sc=state.scenario, urgCap=0, nonCap=0, opCost=0, totU=0, totN=0;
+  var sc=state.scenario, opCost=0, totU=0, totN=0;
   var ranQuarter = state.currentQuarter > 0 ? state.currentQuarter : 1;
   (state.urgentSpots||[]).forEach(function(z){ totU+=z.orders; });
   (state.nonurgentSpots||[]).forEach(function(z){ totN+=z.orders; });
+
+  var vehicles = [];
+  var droneCap = 0, droneUsed = 0;
+  var truckCap = 0, truckUsed = 0;
+
   state.placedWarehouses.filter(function(w){return w.isActive&&!w.isSold;}).forEach(function(wh){
     wh.vehicles.filter(function(v){return !v.is_sold;}).forEach(function(v){
       var vc=sc.vehicle_config[v.type];
-      if(vc.serves_urgent) urgCap+=vc.capacity;
-      if(vc.serves_nonurgent) nonCap+=vc.capacity;
-      opCost+=vc.operating_cost;
+      var entry = {
+        type: v.type,
+        capacity: vc.capacity || 0,
+        serves_urgent: !!vc.serves_urgent,
+        serves_nonurgent: !!vc.serves_nonurgent,
+        used: 0
+      };
+      vehicles.push(entry);
+      opCost += vc.operating_cost || 0;
+      if (v.type === "drone") droneCap += entry.capacity;
+      if (v.type === "truck") truckCap += entry.capacity;
     });
   });
-  var fu=Math.min(urgCap,totU), fn=Math.min(nonCap,totN);
-  var rev=fu*sc.urgent_order_revenue+fn*sc.nonurgent_order_revenue;
-  var profit=rev-opCost, total=totU+totN, fulfilled=fu+fn, totalCap=urgCap+nonCap;
-  var nextQ = ranQuarter+1;
+
+  var remU = totU, remN = totN;
+  var fu = 0, fn = 0;
+
+  // Phase 1: Dedicated urgent
+  vehicles.forEach(function(v){
+    if (v.serves_urgent && !v.serves_nonurgent) {
+      var can = Math.min(v.capacity - v.used, remU);
+      v.used += can;
+      remU -= can;
+      fu += can;
+    }
+  });
+
+  // Phase 2: Dedicated nonurgent
+  vehicles.forEach(function(v){
+    if (!v.serves_urgent && v.serves_nonurgent) {
+      var can = Math.min(v.capacity - v.used, remN);
+      v.used += can;
+      remN -= can;
+      fn += can;
+    }
+  });
+
+  // Phase 3: Flexible (both)
+  vehicles.forEach(function(v){
+    if (v.serves_urgent && v.serves_nonurgent) {
+      var canU = Math.min(v.capacity - v.used, remU);
+      v.used += canU;
+      remU -= canU;
+      fu += canU;
+
+      var canN = Math.min(v.capacity - v.used, remN);
+      v.used += canN;
+      remN -= canN;
+      fn += canN;
+    }
+  });
+
+  vehicles.forEach(function(v){
+    if (v.type === "drone") droneUsed += v.used;
+    if (v.type === "truck") truckUsed += v.used;
+  });
+
+  var rev = fu * sc.urgent_order_revenue + fn * sc.nonurgent_order_revenue;
+  var profit = rev - opCost;
+  var total = totU + totN;
+  var fulfilled = fu + fn;
+  var totalCap = droneCap + truckCap;
+  var nextQ = ranQuarter + 1;
   var pendingCost = computePendingVehicleNetCost(state.demoPendingDeltas||{}, sc.vehicle_config);
-  return {revenue:rev, operating_cost:opCost, profit:profit,
-    cash_after:state.cash-pendingCost+profit, orders_fulfilled:fulfilled, orders_total:total,
-    urgent_fulfilled:fu, urgent_total:totU, nonurgent_fulfilled:fn, nonurgent_total:totN,
-    utilization_rate:totalCap>0?Math.min(fulfilled/totalCap,1):0,
-    serving_pct:total>0?Math.min(fulfilled/total,1):0,
-    stockouts:total-fulfilled, quarter:ranQuarter,
-    completed:nextQ>state.totalQuarters, next_quarter:nextQ};
+
+  return {
+    revenue: rev,
+    operating_cost: opCost,
+    profit: profit,
+    cash_after: state.cash - pendingCost + profit,
+    orders_fulfilled: fulfilled,
+    orders_total: total,
+    urgent_fulfilled: fu,
+    urgent_total: totU,
+    nonurgent_fulfilled: fn,
+    nonurgent_total: totN,
+    utilization_rate: totalCap > 0 ? Math.min(fulfilled / totalCap, 1) : 0,
+    serving_pct: total > 0 ? Math.min(fulfilled / total, 1) : 0,
+    stockouts: total - fulfilled,
+    quarter: ranQuarter,
+    completed: nextQ > state.totalQuarters,
+    next_quarter: nextQ,
+    // Breakdowns
+    urgent_revenue: fu * sc.urgent_order_revenue,
+    nonurgent_revenue: fn * sc.nonurgent_order_revenue,
+    drone_utilization: droneCap > 0 ? droneUsed / droneCap : 0,
+    truck_utilization: truckCap > 0 ? truckUsed / truckCap : 0,
+    urgent_stockouts: totU - fu,
+    nonurgent_stockouts: totN - fn
+  };
 }
 
 /* ── RESULTS ── */
@@ -1522,14 +1625,18 @@ function showResults(q, r, newlyActivated) {
   var pc=r.profit>=0?"var(--green)":"var(--red)", ps=r.profit>=0?"+":"";
   document.getElementById("r-grid").innerHTML =
     '<div class="r-card wide"><div class="r-label">Net Profit / Loss</div><div class="r-val" style="color:'+pc+'">'+ps+'$'+fmtK(r.profit)+'</div></div>'
-    +'<div class="r-card"><div class="r-label">Revenue</div><div class="r-val" style="color:var(--green)">$'+fmtK(r.revenue)+'</div></div>'
+    +'<div class="r-card"><div class="r-label">Revenue (Urgent)</div><div class="r-val" style="color:var(--green)">$'+fmtK(r.urgent_revenue || 0)+'</div></div>'
+    +'<div class="r-card"><div class="r-label">Revenue (Non-Urgent)</div><div class="r-val" style="color:var(--green)">$'+fmtK(r.nonurgent_revenue || 0)+'</div></div>'
+    +'<div class="r-card"><div class="r-label">Truck Utilization</div><div class="r-val">'+Math.round((r.truck_utilization || 0)*100)+'%</div>'
+    +'<div class="r-bar"><div class="r-fill" style="width:'+Math.round((r.truck_utilization || 0)*100)+'%;background:var(--accent)"></div></div></div>'
+    +'<div class="r-card"><div class="r-label">Drone Utilization</div><div class="r-val">'+Math.round((r.drone_utilization || 0)*100)+'%</div>'
+    +'<div class="r-bar"><div class="r-fill" style="width:'+Math.round((r.drone_utilization || 0)*100)+'%;background:var(--blue)"></div></div></div>'
+    +'<div class="r-card"><div class="r-label">Stockouts (Urgent)</div><div class="r-val" style="color:var(--red)">'+(r.urgent_stockouts || 0).toLocaleString()+'</div></div>'
+    +'<div class="r-card"><div class="r-label">Stockouts (Non-Urgent)</div><div class="r-val" style="color:var(--red)">'+(r.nonurgent_stockouts || 0).toLocaleString()+'</div></div>'
     +'<div class="r-card"><div class="r-label">Op. Cost</div><div class="r-val" style="color:var(--red)">$'+fmtK(r.operating_cost)+'</div></div>'
-    +'<div class="r-card"><div class="r-label">Orders Served</div><div class="r-val">'+r.orders_fulfilled.toLocaleString()+'<span style="font-size:12px;color:var(--muted)"> / '+r.orders_total.toLocaleString()+'</span></div>'
-    +'<div class="r-bar"><div class="r-fill" style="width:'+Math.round(r.serving_pct*100)+'%;background:var(--blue)"></div></div></div>'
-    +'<div class="r-card"><div class="r-label">Utilization</div><div class="r-val">'+Math.round(r.utilization_rate*100)+'%</div>'
-    +'<div class="r-bar"><div class="r-fill" style="width:'+Math.round(r.utilization_rate*100)+'%;background:var(--accent)"></div></div></div>'
-    +'<div class="r-card"><div class="r-label">Stockouts</div><div class="r-val" style="color:var(--red)">'+r.stockouts.toLocaleString()+'</div></div>'
-    +'<div class="r-card"><div class="r-label">Cash After</div><div class="r-val">$'+fmtK(state.cash)+'</div></div>';
+    +'<div class="r-card"><div class="r-label">Cash After</div><div class="r-val">$'+fmtK(state.cash)+'</div></div>'
+    +'<div class="r-card wide"><div class="r-label">Orders Served</div><div class="r-val">'+r.orders_fulfilled.toLocaleString()+'<span style="font-size:12px;color:var(--muted)"> / '+r.orders_total.toLocaleString()+'</span></div>'
+    +'<div class="r-bar"><div class="r-fill" style="width:'+Math.round(r.serving_pct*100)+'%;background:var(--blue)"></div></div></div>';
 
   var btn = document.getElementById("r-next-btn");
   if (r.completed || state.completed) {
@@ -1543,6 +1650,7 @@ function showResults(q, r, newlyActivated) {
 }
 
 /* ── GAME OVER ── */
+var goCharts = [];
 function showGameOver() {
   var totalP = state.quarterlyResults.reduce(function(s,q){return s+q.profit;},0);
   var avgS   = state.quarterlyResults.reduce(function(s,q){return s+q.serving_pct;},0)/(state.quarterlyResults.length||1);
@@ -1551,6 +1659,77 @@ function showGameOver() {
     '<div class="go-stat"><div class="go-label">Final Cash</div><div class="go-val" style="color:var(--accent)">$'+fmtK(state.cash)+'</div></div>'
     +'<div class="go-stat"><div class="go-label">Total P&L</div><div class="go-val" style="color:'+(totalP>=0?'var(--green)':'var(--red)')+'">'+(totalP>=0?'+':'-')+'$'+fmtK(Math.abs(totalP))+'</div></div>'
     +'<div class="go-stat"><div class="go-label">Avg Serving</div><div class="go-val" style="color:var(--blue)">'+Math.round(avgS*100)+'%</div></div>';
+
+  // Destroy previous chart instances if any
+  goCharts.forEach(function(c){ c.destroy(); });
+  goCharts = [];
+
+  var labels = state.quarterlyResults.map(function(q){ return 'Q'+q.quarter; });
+  var baseOpts = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { labels: { color: '#e2e8f5', font: { family: 'Inter', size: 11 }, boxWidth: 14, padding: 14 } }
+    },
+    scales: {
+      x: { ticks: { color: '#5878a8', font: { size: 10 } }, grid: { color: 'rgba(26,40,64,.5)' } },
+      y: { beginAtZero: true, ticks: { color: '#5878a8', font: { size: 10 } }, grid: { color: 'rgba(26,40,64,.5)' } }
+    }
+  };
+
+  // Chart 1 — Utilization (Truck vs Drone)
+  goCharts.push(new Chart(document.getElementById('chart-utilization'), {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: 'Truck', data: state.quarterlyResults.map(function(q){ return Math.round((q.truck_utilization||0)*100); }),
+          borderColor: '#FFD24A', backgroundColor: 'rgba(255,210,74,.15)', tension: 0.3, fill: false, pointRadius: 3, borderWidth: 2 },
+        { label: 'Drone', data: state.quarterlyResults.map(function(q){ return Math.round((q.drone_utilization||0)*100); }),
+          borderColor: '#60C8FF', backgroundColor: 'rgba(96,200,255,.15)', tension: 0.3, fill: false, pointRadius: 3, borderWidth: 2 }
+      ]
+    },
+    options: Object.assign({}, baseOpts, { scales: Object.assign({}, baseOpts.scales, {
+      y: Object.assign({}, baseOpts.scales.y, { max: 100, ticks: Object.assign({}, baseOpts.scales.y.ticks, { callback: function(v){ return v+'%'; } }) })
+    }) })
+  }));
+
+  // Chart 2 — Revenue per Quarter
+  goCharts.push(new Chart(document.getElementById('chart-revenue'), {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Revenue',
+        data: state.quarterlyResults.map(function(q){ return Math.round(q.revenue); }),
+        backgroundColor: 'rgba(74,222,128,.65)',
+        borderColor: '#4ADE80',
+        borderWidth: 1,
+        borderRadius: 4
+      }]
+    },
+    options: Object.assign({}, baseOpts, { plugins: Object.assign({}, baseOpts.plugins, {
+      legend: { display: false }
+    }), scales: Object.assign({}, baseOpts.scales, {
+      y: Object.assign({}, baseOpts.scales.y, { ticks: Object.assign({}, baseOpts.scales.y.ticks, { callback: function(v){ return '$'+fmtK(v); } }) })
+    }) })
+  }));
+
+  // Chart 3 — Urgent vs Non-Urgent Orders Delivered
+  goCharts.push(new Chart(document.getElementById('chart-orders'), {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: 'Urgent', data: state.quarterlyResults.map(function(q){ return q.urgent_fulfilled||0; }),
+          backgroundColor: 'rgba(248,113,113,.7)', borderColor: '#F87171', borderWidth: 1, borderRadius: 4 },
+        { label: 'Non-Urgent', data: state.quarterlyResults.map(function(q){ return q.nonurgent_fulfilled||0; }),
+          backgroundColor: 'rgba(96,200,255,.55)', borderColor: '#60C8FF', borderWidth: 1, borderRadius: 4 }
+      ]
+    },
+    options: baseOpts
+  }));
+
   document.getElementById("gameover-overlay").classList.add("show");
 }
 
