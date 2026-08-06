@@ -153,14 +153,15 @@ def generate_demand(
     pool = demand_zone_positions[:]
     by_id = {z["id"]: z for z in pool}
 
-    # Calculate active ratio: starts at 50% in Q1 and increases linearly to 100% in the last quarter
+    # Calculate active ratio: starts at 50% in Q1 and increases linearly to 100% by 75% progress (Q12)
     total_q = max(1, total_quarters)
     current_q = max(1, min(quarter, total_q))
+    progress = current_q / total_q
     
-    if total_q > 1:
-        active_ratio = 0.5 + 0.5 * ((current_q - 1) / (total_q - 1))
-    else:
+    if progress >= 0.75:
         active_ratio = 1.0
+    else:
+        active_ratio = 0.5 + 0.5 * (progress / 0.75)
 
     target_active_count = max(2, int(len(pool) * active_ratio))
     target_active_count = min(target_active_count, len(pool))
