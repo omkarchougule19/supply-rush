@@ -78,6 +78,14 @@ def create_scenario(payload: ScenarioCreate, db: Session = Depends(get_db)):
     while db.query(Scenario).filter(Scenario.code == code).first():
         code = generate_code()
 
+    wh_slots = [s.dict() for s in payload.warehouse_slots]
+    if not wh_slots:
+        wh_slots = DEFAULT_WAREHOUSE_SLOTS
+
+    demand_zones = [s.dict() for s in payload.demand_zone_positions]
+    if not demand_zones:
+        demand_zones = DEFAULT_DEMAND_POSITIONS
+
     sc = Scenario(
         code=code,
         name=payload.name,
@@ -92,8 +100,8 @@ def create_scenario(payload: ScenarioCreate, db: Session = Depends(get_db)):
         urgent_demand_ratio=payload.urgent_demand_ratio,
         demand_reveal_start_quarter=payload.demand_reveal_start_quarter,
         warehouse_service_radius=payload.warehouse_service_radius,
-        warehouse_slots=json.dumps([s.dict() for s in payload.warehouse_slots]),
-        demand_zone_positions=json.dumps([s.dict() for s in payload.demand_zone_positions]),
+        warehouse_slots=json.dumps(wh_slots),
+        demand_zone_positions=json.dumps(demand_zones),
     )
     db.add(sc)
     db.commit()
@@ -123,8 +131,17 @@ def update_scenario(code: str, payload: ScenarioUpdate, db: Session = Depends(ge
     if payload.urgent_demand_ratio     is not None: sc.urgent_demand_ratio     = payload.urgent_demand_ratio
     if payload.demand_reveal_start_quarter is not None: sc.demand_reveal_start_quarter = payload.demand_reveal_start_quarter
     if payload.warehouse_service_radius is not None: sc.warehouse_service_radius = payload.warehouse_service_radius
-    if payload.warehouse_slots       is not None: sc.warehouse_slots       = json.dumps([s.dict() for s in payload.warehouse_slots])
-    if payload.demand_zone_positions is not None: sc.demand_zone_positions = json.dumps([s.dict() for s in payload.demand_zone_positions])
+    if payload.warehouse_slots is not None:
+        wh_slots = [s.dict() for s in payload.warehouse_slots]
+        if not wh_slots:
+            wh_slots = DEFAULT_WAREHOUSE_SLOTS
+        sc.warehouse_slots = json.dumps(wh_slots)
+
+    if payload.demand_zone_positions is not None:
+        demand_zones = [s.dict() for s in payload.demand_zone_positions]
+        if not demand_zones:
+            demand_zones = DEFAULT_DEMAND_POSITIONS
+        sc.demand_zone_positions = json.dumps(demand_zones)
     db.commit()
     db.refresh(sc)
     return _parse_scenario(sc)
