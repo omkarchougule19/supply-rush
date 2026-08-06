@@ -252,6 +252,26 @@ def start_normal_play(payload: NormalModeStart, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(sc)
 
+    # Compare configs safely as deserialized dicts and self-heal legacy settings
+    current_wh_cfg = json.loads(sc.warehouse_config or "{}")
+    current_v_cfg = json.loads(sc.vehicle_config or "{}")
+
+    target_wh_cfg = {
+        "small":  {"purchase_cost": 250_000, "capacity": 500,  "build_quarters": 1, "sell_back": 125_000},
+        "medium": {"purchase_cost": 500_000, "capacity": 1200, "build_quarters": 2, "sell_back": 250_000},
+        "large":  {"purchase_cost": 800_000, "capacity": 2500, "build_quarters": 4, "sell_back": 400_000},
+    }
+    target_v_cfg = {
+        "truck": {"purchase_cost": 20_000,  "operating_cost": 800, "capacity": 200, "sell_back": 12_000,  "serves_urgent": False, "serves_nonurgent": True},
+        "drone": {"purchase_cost": 9_000,   "operating_cost": 800, "capacity": 60,  "sell_back": 5_400,   "serves_urgent": True,  "serves_nonurgent": True},
+    }
+
+    if current_wh_cfg != target_wh_cfg or current_v_cfg != target_v_cfg:
+        sc.warehouse_config = json.dumps(target_wh_cfg)
+        sc.vehicle_config = json.dumps(target_v_cfg)
+        db.commit()
+        db.refresh(sc)
+
     pid = generate_play_id()
     master_zones = json.loads(sc.demand_zone_positions)
     schedule = select_and_schedule_demand_zones(
