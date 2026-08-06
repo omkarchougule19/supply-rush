@@ -17,6 +17,24 @@ from routes import router
 # Create all DB tables on startup
 Base.metadata.create_all(bind=engine)
 
+# Self-healing migration for QuarterResult new columns in production DB (Postgres/SQLite)
+from sqlalchemy import text
+with engine.connect() as conn:
+    columns_to_add = [
+        ("urgent_revenue", "FLOAT", "0.0"),
+        ("nonurgent_revenue", "FLOAT", "0.0"),
+        ("drone_utilization", "FLOAT", "0.0"),
+        ("truck_utilization", "FLOAT", "0.0"),
+        ("urgent_stockouts", "INTEGER", "0"),
+        ("nonurgent_stockouts", "INTEGER", "0"),
+    ]
+    for col_name, col_type, default_val in columns_to_add:
+        try:
+            conn.execute(text(f"ALTER TABLE quarter_results ADD COLUMN {col_name} {col_type} DEFAULT {default_val}"))
+            conn.commit()
+        except Exception:
+            pass
+
 app = FastAPI(
     title="Supply Rush API",
     description="Backend for Supply Rush — supply chain education game",
