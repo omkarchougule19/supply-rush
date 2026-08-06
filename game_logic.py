@@ -143,81 +143,52 @@ def generate_demand(
     seed: int = None,
 ) -> Dict:
     """
-    Generate demand for the quarter, with milestone-based activation for the subset
-    of zones that would otherwise never activate due to the 90% cap (bringing all
-    revealed zones to active status by 75% game progress).
+    Generate demand for the quarter, scaling the target number of active zones
+    linearly from 50% in Quarter 1 to 100% in the final quarter (eliminating
+    all golden circles by game completion).
     """
     if seed is not None:
         random.seed(seed)
 
-    pool  = demand_zone_positions[:]
+    pool = demand_zone_positions[:]
     by_id = {z["id"]: z for z in pool}
-    n     = len(pool)
 
-    # 1. Stably identify the subset of never-activated zones (up to the 10% cap)
-    sorted_pool = sorted(pool, key=lambda z: z["id"])
-    u_count = n - int(n * 0.9)
-    never_active_zones = sorted_pool[-u_count:] if u_count > 0 else []
-    never_active_ids = {z["id"] for z in never_active_zones}
-
-    # 2. Determine target number of never-activated zones based on progress milestones
-    progress = quarter / total_quarters
-    if progress >= 0.75:
-        target_never_active = u_count
-    elif progress >= 0.5:
-        target_never_active = int(u_count * 0.75 + 0.5)  # 25% + 50% = 75% cumulative
-    elif progress >= 0.25:
-        target_never_active = int(u_count * 0.25 + 0.5)  # 25% cumulative
+    # Calculate active ratio: starts at 50% in Q1 and increases linearly to 100% in the last quarter
+    total_q = max(1, total_quarters)
+    current_q = max(1, min(quarter, total_q))
+    
+    if total_q > 1:
+        active_ratio = 0.5 + 0.5 * ((current_q - 1) / (total_q - 1))
     else:
-        target_never_active = 0
+        active_ratio = 1.0
 
-    # 3. Carry forward already-activated zones
+    target_active_count = max(2, int(len(pool) * active_ratio))
+    target_active_count = min(target_active_count, len(pool))
+
+    # Carry forward already-activated zones
     urgent_active    = [z for z in activated_urgent    if z["id"] in by_id]
     nonurgent_active = [z for z in activated_nonurgent if z["id"] in by_id]
     already_active_ids = {z["id"] for z in urgent_active} | {z["id"] for z in nonurgent_active}
 
-    # 4. Separate normal candidates and never-active zones
-    normal_candidates = [z for z in pool if z["id"] not in already_active_ids and z["id"] not in never_active_ids]
-    active_normal_ids = already_active_ids - never_active_ids
+    new_spots_needed = max(0, target_active_count - len(already_active_ids))
 
-    # 5. Sample normal spots (capped at 90% of normal pool)
-    n_normal = n - u_count
-    total_normal_spots = max(2, int(n_normal * random.uniform(0.5, 0.9)))
-    new_normal_spots_needed = max(0, min(total_normal_spots - len(active_normal_ids), len(normal_candidates)))
+    if new_spots_needed > 0:
+        candidates = [z for z in pool if z["id"] not in already_active_ids]
+        new_zones = random.sample(candidates, min(new_spots_needed, len(candidates)))
+        
+        new_urgent_count = round(len(new_zones) * urgent_ratio)
+        new_urgent_zones = new_zones[:new_urgent_count]
+        new_nonurgent_zones = new_zones[new_urgent_count:]
 
-    new_urgent_count = min(round(new_normal_spots_needed * urgent_ratio), len(normal_candidates))
-    new_urgent_zones = random.sample(normal_candidates, new_urgent_count) if new_urgent_count > 0 else []
-    used_ids = {z["id"] for z in new_urgent_zones}
-    remaining_candidates = [z for z in normal_candidates if z["id"] not in used_ids]
+        def fix_position(zone):
+            return {
+                "id": zone["id"],
+                "x":  round(zone["x"] + random.uniform(-1.2, 1.2), 2),
+                "y":  round(zone["y"] + random.uniform(-1.2, 1.2), 2),
+            }
 
-    new_nonurgent_count = min(new_normal_spots_needed - new_urgent_count, len(remaining_candidates))
-    new_nonurgent_zones = random.sample(remaining_candidates, new_nonurgent_count) if new_nonurgent_count > 0 else []
-
-    def fix_position(zone):
-        return {
-            "id": zone["id"],
-            "x":  round(zone["x"] + random.uniform(-1.2, 1.2), 2),
-            "y":  round(zone["y"] + random.uniform(-1.2, 1.2), 2),
-        }
-
-    # Add newly activated normal zones
-    urgent_active    = urgent_active    + [fix_position(z) for z in new_urgent_zones]
-    nonurgent_active = nonurgent_active + [fix_position(z) for z in new_nonurgent_zones]
-
-    # 6. Ensure target count of never-active zones are activated
-    active_never_zones = [z for z in never_active_zones if z["id"] in already_active_ids]
-    active_never_ids = {z["id"] for z in active_never_zones}
-    never_zones_to_activate = [z for z in never_active_zones if z["id"] not in active_never_ids]
-    never_zones_needed = max(0, target_never_active - len(active_never_ids))
-
-    if never_zones_needed > 0:
-        new_never_zones = never_zones_to_activate[:never_zones_needed]
-        new_never_urgent_count = round(never_zones_needed * urgent_ratio)
-        new_never_urgent = new_never_zones[:new_never_urgent_count]
-        new_never_nonurgent = new_never_zones[new_never_urgent_count:]
-
-        urgent_active = urgent_active + [fix_position(z) for z in new_never_urgent]
-        nonurgent_active = nonurgent_active + [fix_position(z) for z in new_never_nonurgent]
+        urgent_active = urgent_active + [fix_position(z) for z in new_urgent_zones]
+        nonurgent_active = nonurgent_active + [fix_position(z) for z in new_nonurgent_zones]
 
     def make_spot(fixed_zone, spot_type):
         return {
