@@ -184,8 +184,8 @@ def generate_demand(
         def fix_position(zone):
             return {
                 "id": zone["id"],
-                "x":  round(zone["x"] + random.uniform(-1.2, 1.2), 2),
-                "y":  round(zone["y"] + random.uniform(-1.2, 1.2), 2),
+                "x":  zone["x"],
+                "y":  zone["y"],
             }
 
         urgent_active = urgent_active + [fix_position(z) for z in new_urgent_zones]

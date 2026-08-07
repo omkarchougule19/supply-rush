@@ -46,6 +46,18 @@
     .pause-resume { background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#0a1220; }
     .pause-exit { background:var(--card); color:var(--text); border:1px solid var(--border); }
     .pause-exit-warn { background:transparent; color:var(--red); border:1px solid rgba(248,113,113,.35); }
+
+    /* CONFIRMATION OVERLAY */
+    #confirm-overlay { position:fixed; inset:0; background:rgba(7,13,24,.85); z-index:80; display:none; align-items:center; justify-content:center; backdrop-filter:blur(3px); }
+    #confirm-overlay.show { display:flex; }
+    .confirm-box { width:min(340px, 92vw); background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:clamp(20px,4vw,32px) clamp(16px,4vw,28px); text-align:center; }
+    .confirm-title { font-family:'Space Grotesk',sans-serif; font-size:18px; font-weight:700; margin-bottom:12px; color:var(--accent); }
+    .confirm-msg { font-size:13px; color:var(--muted); margin-bottom:24px; line-height:1.5; }
+    .confirm-buttons { display:flex; gap:12px; }
+    .confirm-btn { flex:1; padding:11px; border:none; border-radius:8px; font-size:13px; font-weight:700; font-family:'Space Grotesk',sans-serif; cursor:pointer; transition:opacity .15s; }
+    .confirm-btn:hover { opacity:.85; }
+    .confirm-btn.yes { background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#0a1220; }
+    .confirm-btn.no { background:var(--card); color:var(--text); border:1px solid var(--border); }
     .menu-btn { background:none; border:none; color:var(--muted); font-size:20px; cursor:pointer; padding:4px 8px; border-radius:6px; line-height:1; transition:all .15s; }
     .menu-btn:hover { background:var(--card); color:var(--text); }
 
@@ -493,6 +505,18 @@
   </div>
 </div>
 
+<!-- CONFIRMATION DIALOG -->
+<div id="confirm-overlay">
+  <div class="confirm-box">
+    <div class="confirm-title" id="confirm-title">Confirm Action</div>
+    <div class="confirm-msg" id="confirm-msg">Are you sure you want to proceed?</div>
+    <div class="confirm-buttons">
+      <button class="confirm-btn no" onclick="closeConfirm(false)">Cancel</button>
+      <button class="confirm-btn yes" onclick="closeConfirm(true)">Confirm</button>
+    </div>
+  </div>
+</div>
+
 <!-- RESULTS POPUP -->
 <div id="results-overlay">
   <div class="results-box">
@@ -614,21 +638,36 @@ function openPause() {
 function closePause() {
   document.getElementById("pause-overlay").classList.remove("show");
 }
+var confirmCallback = null;
+function showConfirm(title, msg, onYes) {
+  document.getElementById("confirm-title").textContent = title;
+  document.getElementById("confirm-msg").textContent = msg;
+  document.getElementById("confirm-overlay").classList.add("show");
+  confirmCallback = onYes;
+}
+function closeConfirm(isYes) {
+  document.getElementById("confirm-overlay").classList.remove("show");
+  if (isYes && confirmCallback) confirmCallback();
+  confirmCallback = null;
+}
+
 function exitToHome(discard) {
+  var title = discard ? "Quit Game" : "Exit to Home";
   var msg = discard
     ? "Quit and discard all progress? This cannot be undone."
     : "Exit to home? Your current quarter progress will be lost.";
-  if (!confirm(msg)) return;
-  closePause();
-  // Reset state
-  state.playId = null; state.completed = false;
-  state.quarterlyResults = []; state.placedWarehouses = [];
-  if (plChart) { plChart.destroy(); plChart = null; }
-  // Go back to entry screen via hash
-  window.location.hash = "";
-  document.getElementById("game-ui").className = "";
-  document.getElementById("entry-screen").style.display = "flex";
-  document.getElementById("entry-error").textContent = "";
+  showConfirm(title, msg, function() {
+    closePause();
+    // Reset state
+    state.playId = null; state.completed = false;
+    state.quarterlyResults = []; state.placedWarehouses = [];
+    if (plChart) { plChart.destroy(); plChart = null; }
+    // Go back to entry screen via hash
+    window.location.hash = "";
+    document.getElementById("game-ui").className = "";
+    document.getElementById("entry-screen").style.display = "flex";
+    document.getElementById("entry-error").textContent = "";
+  });
 }
 
 // Push hash when game starts so browser back = exit to entry
@@ -685,6 +724,7 @@ function setErr(m){ document.getElementById("entry-error").textContent=m; }
 
 /* ── INIT ── */
 function initGame(data) {
+  if (plChart) { plChart.destroy(); plChart = null; }
   state.playId         = data.play_id;
   state.scenarioCode   = data.scenario_code;
   state.studentName    = data.student_name;
@@ -926,6 +966,7 @@ function renderDemandSpots() {
   (state.urgentSpots||[]).forEach(function(z) {
     var el = document.createElement("div");
     el.className = "demand-spot urgent";
+    el.dataset.zoneId = z.zone_id;
     el.style.left = z.x+"%";
     el.style.top  = z.y+"%";
     el.title = "Urgent: "+z.orders+" orders";
@@ -936,6 +977,7 @@ function renderDemandSpots() {
   (state.nonurgentSpots||[]).forEach(function(z) {
     var el = document.createElement("div");
     el.className = "demand-spot nonurgent";
+    el.dataset.zoneId = z.zone_id;
     el.style.left = z.x+"%";
     el.style.top  = z.y+"%";
     el.title = "Non-urgent: "+z.orders+" orders";
@@ -1474,7 +1516,7 @@ function adjustVehicle(whId, type, action) {
       state.demoPendingDeltas[type] = td;
       wh.vehicleCounts = wh.vehicleCounts || {};
       wh.vehicleCounts[type] = (wh.vehicleCounts[type]||0) + 1;
-      wh.vehicles.push({type:type,purchased_at:state.currentQuarter,is_sold:false});
+      wh.vehicles.push({id:"demo_"+Math.random().toString(36).substr(2,9),type:type,purchased_at:state.currentQuarter,is_sold:false});
       refresh(state.cash, wh.vehicleCounts, projectedCost); return;
     }
     fetch(API+"/sessions/"+state.playId+"/vehicles",{
@@ -1495,12 +1537,14 @@ function adjustVehicle(whId, type, action) {
     if (!counts0[type] || counts0[type] < 1) return;
     // (No confirm dialog — the +/- stepper is meant to feel instant and reversible-ish.)
 
+    var targetVeh = null;
+    for (var j=wh.vehicles.length-1; j>=0; j--) {
+      if (wh.vehicles[j].type===type && !wh.vehicles[j].is_sold) { targetVeh=wh.vehicles[j]; break; }
+    }
+    if (!targetVeh) return;
+
     if (state.playId===DEMO_ID) {
-      for (var i=wh.vehicles.length-1; i>=0; i--) {
-        if (wh.vehicles[i].type===type && !wh.vehicles[i].is_sold) {
-          wh.vehicles[i].is_sold = true; break;
-        }
-      }
+      targetVeh.is_sold = true;
       wh.vehicleCounts[type] = Math.max(0, (wh.vehicleCounts[type]||1)-1);
       state.demoPendingDeltas = state.demoPendingDeltas || {};
       var td2 = state.demoPendingDeltas[type] || {bought:0, sold:0};
@@ -1509,18 +1553,13 @@ function adjustVehicle(whId, type, action) {
       var newCost = computePendingVehicleNetCost(state.demoPendingDeltas, state.scenario.vehicle_config);
       refresh(state.cash, wh.vehicleCounts, newCost); return;
     }
-    // Find index of last unsold vehicle of this type
-    var idx = -1;
-    for (var j=wh.vehicles.length-1; j>=0; j--) {
-      if (wh.vehicles[j].type===type && !wh.vehicles[j].is_sold) { idx=j; break; }
-    }
-    if (idx < 0) return;
+
     fetch(API+"/sessions/"+state.playId+"/vehicles/sell",{
       method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({warehouse_id:whId,vehicle_index:idx})
+      body:JSON.stringify({warehouse_id:whId,vehicle_id:targetVeh.id})
     }).then(function(r){ return r.ok?r.json():r.json().then(function(e){throw e;}); })
       .then(function(d){
-        wh.vehicles[idx].is_sold = true;
+        targetVeh.is_sold = true;
         wh.vehicleCounts[type] = Math.max(0,(wh.vehicleCounts[type]||1)-1);
         refresh(d.cash_remaining, wh.vehicleCounts, d.pending_vehicle_net_cost);
       })
@@ -1822,7 +1861,7 @@ function renderRemainingDemand(r) {
     var lbl = mc.querySelector(".demand-label[data-zone-id='"+z.zone_id+"']");
     if (lbl) lbl.textContent = remaining > 0 ? remaining.toLocaleString() : "0";
     // dim dot if fully served
-    var dot = mc.querySelector(".demand-spot.urgent[style*='left:"+z.x+"%']");
+    var dot = mc.querySelector(".demand-spot.urgent[data-zone-id='"+z.zone_id+"']");
     if (dot) {
       if (remaining === 0) dot.classList.add("served");
       else dot.classList.remove("served");
@@ -1833,7 +1872,7 @@ function renderRemainingDemand(r) {
     var remaining = totalNonurgent > 0 ? Math.round(z.orders * nonurgentSO / totalNonurgent) : 0;
     var lbl = mc.querySelector(".demand-label[data-zone-id='"+z.zone_id+"']");
     if (lbl) lbl.textContent = remaining > 0 ? remaining.toLocaleString() : "0";
-    var dot = mc.querySelector(".demand-spot.nonurgent[style*='left:"+z.x+"%']");
+    var dot = mc.querySelector(".demand-spot.nonurgent[data-zone-id='"+z.zone_id+"']");
     if (dot) {
       if (remaining === 0) dot.classList.add("served");
       else dot.classList.remove("served");

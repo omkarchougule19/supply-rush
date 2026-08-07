@@ -3,7 +3,7 @@ models.py — All database tables for Supply Rush
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, Float, String, Boolean, DateTime, Text, ForeignKey
 from sqlalchemy.orm import relationship
 from database import Base
@@ -18,7 +18,7 @@ class Scenario(Base):
     id              = Column(Integer, primary_key=True, index=True)
     code            = Column(String(8), unique=True, index=True, nullable=False)
     name            = Column(String(120), nullable=False, default="Untitled Scenario")
-    created_at      = Column(DateTime, default=datetime.utcnow)
+    created_at      = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # ── Game structure ────────────────────────────────────────────────────────
     total_quarters  = Column(Integer, default=16)
@@ -85,7 +85,7 @@ class Play(Base):
     scenario_code   = Column(String(8),  nullable=True, index=True)                # null = normal mode
     scenario_id     = Column(Integer, ForeignKey("scenarios.id"), nullable=True)   # null = normal mode
     student_name    = Column(String(120), nullable=True)
-    started_at      = Column(DateTime, default=datetime.utcnow)
+    started_at      = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     current_quarter = Column(Integer, default=0)   # 0 = setup phase, no demand/simulation; 1..total_quarters = play
     cash            = Column(Float, nullable=False)
     completed       = Column(Boolean, default=False)

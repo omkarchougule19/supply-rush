@@ -157,7 +157,7 @@ class SellWarehouseRequest(BaseModel):
 
 class SellVehicleRequest(BaseModel):
     warehouse_id:  int
-    vehicle_index: int   # index in the vehicles JSON array
+    vehicle_id:    str   # unique ID of the vehicle
 
 
 # ─────────────────────────────────────────────────────────────────────────────

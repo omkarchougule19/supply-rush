@@ -405,9 +405,11 @@ def add_vehicle(play_id: str, payload: AddVehicleRequest, db: Session = Depends(
     if play.cash - projected_net_cost < 0:
         raise HTTPException(400, f"Insufficient cash: this purchase would need ${projected_net_cost:,.0f} net this quarter, have ${play.cash:,.0f}")
 
+    import uuid
     play.pending_vehicle_deltas = json.dumps(deltas)
     vehicles = json.loads(wh.vehicles)
-    vehicles.append({"type": payload.vehicle_type, "purchased_at": play.current_quarter, "is_sold": False})
+    vehicle_id = uuid.uuid4().hex[:8]
+    vehicles.append({"id": vehicle_id, "type": payload.vehicle_type, "purchased_at": play.current_quarter, "is_sold": False})
     wh.vehicles = json.dumps(vehicles)
     db.commit()
     return {
@@ -448,14 +450,25 @@ def sell_vehicle(play_id: str, payload: SellVehicleRequest, db: Session = Depend
     if not wh:
         raise HTTPException(404, "Warehouse not found")
 
+    import uuid
     vehicles = json.loads(wh.vehicles)
-    if payload.vehicle_index >= len(vehicles) or vehicles[payload.vehicle_index]["is_sold"]:
+    # Backfill unique IDs for legacy vehicles
+    for i, v in enumerate(vehicles):
+        if "id" not in v:
+            v["id"] = f"legacy_{i}_{uuid.uuid4().hex[:6]}"
+
+    target_vehicle = None
+    for v in vehicles:
+        if v.get("id") == payload.vehicle_id and not v.get("is_sold"):
+            target_vehicle = v
+            break
+
+    if not target_vehicle:
         raise HTTPException(400, "Vehicle not found or already sold")
 
     sc = play.scenario
     v_cfg = json.loads(sc.vehicle_config)
-    v = vehicles[payload.vehicle_index]
-    vtype = v["type"]
+    vtype = target_vehicle["type"]
 
     deltas = json.loads(play.pending_vehicle_deltas or "{}")
     type_deltas = deltas.get(vtype, {"bought": 0, "sold": 0})
@@ -463,7 +476,7 @@ def sell_vehicle(play_id: str, payload: SellVehicleRequest, db: Session = Depend
     deltas[vtype] = type_deltas
     play.pending_vehicle_deltas = json.dumps(deltas)
 
-    vehicles[payload.vehicle_index]["is_sold"] = True
+    target_vehicle["is_sold"] = True
     wh.vehicles = json.dumps(vehicles)
     db.commit()
 
@@ -717,7 +730,6 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
         play.completed = True
     else:
         play.current_quarter = ran_quarter + 1
-        advance_warehouse_builds(play.warehouses, ran_quarter + 1, wh_cfg)
 
     db.commit()
 
