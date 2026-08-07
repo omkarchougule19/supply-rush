@@ -39,7 +39,7 @@ with engine.connect() as conn:
             conn.execute(text(f"ALTER TABLE quarter_results ADD COLUMN {col_name} {col_type} DEFAULT {default_val}"))
             conn.commit()
         except Exception:
-            pass
+            conn.rollback()  # Reset aborted transaction state before next column (critical for PostgreSQL)
 
 app = FastAPI(
     title="Supply Rush API",
