@@ -64,6 +64,46 @@
     .run-btn { background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#0a1220; border:none; border-radius:8px; padding:8px 18px; font-size:13px; font-weight:700; font-family:'Space Grotesk',sans-serif; cursor:pointer; transition:opacity .15s; }
     .run-btn:hover { opacity:.88; }
     .run-btn:disabled { opacity:.4; cursor:not-allowed; }
+    .run-btn.debt-blocked {
+      background: var(--red) !important;
+      color: #fff !important;
+      opacity: 1 !important;
+    }
+    .run-btn.debt-blocked:hover {
+      background: #dc2626 !important;
+      opacity: 0.9 !important;
+    }
+    .global-error-banner {
+      background: var(--red);
+      color: #fff;
+      padding: 10px 20px;
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 100;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.25);
+    }
+    .global-error-banner button {
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    .wh-panel-error {
+      background: rgba(239, 68, 68, 0.12);
+      border-bottom: 1px solid rgba(239, 68, 68, 0.25);
+      color: #F87171;
+      padding: 10px 16px;
+      font-size: 11.5px;
+      font-weight: 500;
+      line-height: 1.4;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
 
     /* LAYOUT */
     #game-ui { height:100vh; flex-direction:column; display:none; }
@@ -223,6 +263,20 @@
     .wh-buy-btn:disabled { opacity:.38; cursor:not-allowed; }
     .wh-sell-btn { width:100%; padding:10px; background:transparent; color:var(--red); border:1px solid var(--red); border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; margin-top:8px; transition:background .15s; }
     .wh-sell-btn:hover { background:rgba(248,113,113,.08); }
+    .wh-sell-btn.confirm {
+      background: var(--red);
+      color: #fff;
+      border-color: var(--red);
+      animation: sellPulse 1.2s infinite;
+    }
+    .wh-sell-btn.confirm:hover {
+      background: #dc2626;
+    }
+    @keyframes sellPulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(0.98); opacity: 0.95; }
+      100% { transform: scale(1); }
+    }
     .wh-fulfill-card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-top:18px; }
     .wh-fulfill-row { margin-bottom:12px; }
     .wh-fulfill-row:last-child { margin-bottom:0; }
@@ -296,6 +350,8 @@
 
 <!-- GAME UI -->
 <div id="game-ui">
+  <!-- Global error toast banner -->
+  <div id="global-error-banner" class="global-error-banner" style="display:none"></div>
   <div class="topbar">
     <div style="display:flex;align-items:center;gap:12px;"><button class="menu-btn" onclick="openPause()" title="Menu">&#9776;</button><div class="logo"><div class="logo-mark">🚚</div>Supply Rush</div></div>
     <div class="top-stats">
@@ -394,6 +450,8 @@
     <div class="wh-panel-title" id="wh-panel-title">Warehouse</div>
     <button class="wh-panel-close" onclick="closeWhPanel()">&#10005;</button>
   </div>
+  <!-- Premium inline error/alert container -->
+  <div id="wh-panel-error" class="wh-panel-error" style="display:none"></div>
   <div class="wh-panel-body" id="wh-panel-body"></div>
 </div>
 
@@ -1119,6 +1177,7 @@ function fakeDemand() {
 
 /* ── BUY PANEL ── */
 function openBuyPanel(slot) {
+  clearPanelError();
   state.selectedSlotId = slot.id;
   var wc = state.scenario.warehouse_config;
   var html = '<div class="wh-panel-section">Choose Warehouse Type</div>';
@@ -1188,7 +1247,7 @@ function confirmBuy() {
   }).then(function(r){ return r.ok?r.json():r.json().then(function(e){throw e;}); })
     .then(function(d){ doPlace({id:d.warehouse_id, cashLeft:d.cash_remaining,
       isActive:d.is_active, quartersUntilActive:d.quarters_until_active, activatesNextRun:d.activates_next_run}); })
-    .catch(function(e){ alert((e&&e.detail)||"Error placing warehouse."); });
+    .catch(function(e){ showPanelError((e&&e.detail)||"Error placing warehouse."); });
 }
 
 /* ── MANAGE PANEL ── */
@@ -1241,6 +1300,7 @@ function computeWarehouseFulfillment(slot, wh) {
 }
 
 function openManagePanel(slot, placed) {
+  clearPanelError();
   state.selectedSlotId = slot.id;
   var wCfg = state.scenario.warehouse_config[placed.warehouseType];
   var vCfg = state.scenario.vehicle_config;
@@ -1353,7 +1413,7 @@ function adjustVehicle(whId, type, action) {
       return sum + (c ? c.capacity * wh.vehicleCounts[t] : 0);
     }, 0);
     if (currentUsed + vc.capacity > wCfg.capacity) {
-      alert("This warehouse's fleet capacity ("+wCfg.capacity+"/qtr) is full.");
+      showPanelError("This warehouse's fleet capacity ("+wCfg.capacity+"/qtr) is full.");
       return;
     }
     if (state.playId===DEMO_ID) {
@@ -1362,7 +1422,7 @@ function adjustVehicle(whId, type, action) {
       td.bought += 1;
       var projected = {}; Object.assign(projected, state.demoPendingDeltas); projected[type] = td;
       var projectedCost = computePendingVehicleNetCost(projected, state.scenario.vehicle_config);
-      if (state.cash - projectedCost < 0) { alert("Not enough cash."); return; }
+      if (state.cash - projectedCost < 0) { showPanelError("Not enough cash to purchase this vehicle."); return; }
       state.demoPendingDeltas[type] = td;
       wh.vehicleCounts = wh.vehicleCounts || {};
       wh.vehicleCounts[type] = (wh.vehicleCounts[type]||0) + 1;
@@ -1379,7 +1439,7 @@ function adjustVehicle(whId, type, action) {
         d.vehicles.forEach(function(v){ if(!v.is_sold) counts[v.type]=(counts[v.type]||0)+1; });
         refresh(d.cash_remaining, counts, d.pending_vehicle_net_cost);
       })
-      .catch(function(e){ alert((e&&e.detail)||"Error."); });
+      .catch(function(e){ showPanelError((e&&e.detail)||"Error buying vehicle."); });
 
   } else {
     // sell — find last unsold vehicle of this type
@@ -1416,12 +1476,21 @@ function adjustVehicle(whId, type, action) {
         wh.vehicleCounts[type] = Math.max(0,(wh.vehicleCounts[type]||1)-1);
         refresh(d.cash_remaining, wh.vehicleCounts, d.pending_vehicle_net_cost);
       })
-      .catch(function(e){ alert((e&&e.detail)||"Error."); });
+      .catch(function(e){ showPanelError((e&&e.detail)||"Error selling vehicle."); });
   }
 }
 
-function sellWarehouse(whId) {
-  if (!confirm("Sell this warehouse?")) return;
+function sellWarehouse(whId, confirmState) {
+  if (!confirmState) {
+    var btn = document.querySelector(".wh-sell-btn");
+    if (btn) {
+      btn.className = "wh-sell-btn confirm";
+      btn.textContent = "Are you sure? Click again to Confirm";
+      btn.setAttribute("onclick", "sellWarehouse(" + whId + ", true)");
+      clearPanelError();
+    }
+    return;
+  }
   var wh  = state.placedWarehouses.filter(function(w){return w.id===whId;})[0];
   if (!wh) return;
   var cfg = state.scenario.warehouse_config[wh.warehouseType];
@@ -1438,12 +1507,13 @@ function sellWarehouse(whId) {
     body:JSON.stringify({warehouse_id:whId})
   }).then(function(r){ return r.ok?r.json():r.json().then(function(e){throw e;}); })
     .then(function(d){ doSell(d.cash_remaining); })
-    .catch(function(e){ alert((e&&e.detail)||"Error."); });
+    .catch(function(e){ showPanelError((e&&e.detail)||"Error selling warehouse."); });
 }
 
 function closeWhPanel() {
   document.getElementById("wh-panel").classList.remove("open");
   state.selectedSlotId = null;
+  clearPanelError();
 }
 
 /* ── RUN QUARTER ── */
@@ -1557,8 +1627,17 @@ function runQuarter() {
     .then(function(result){ pendingResult = result; resultRef.value = result; backendDone = true; tryFinish(); })
     .catch(function(e){
       hideDeliveryOverlay();
-      alert((e&&e.detail)||"Error.");
-      btn.disabled=false; btn.textContent = wasSetup ? "▶ Start Game" : "▶ Run Quarter";
+      showGlobalError((e&&e.detail)||"Error advancing quarter.");
+      btn.disabled=false;
+      if (state.cash < 0) {
+        btn.classList.add("debt-blocked");
+        btn.textContent = "⚠️ Resolve Debt";
+        btn.setAttribute("title", "Cash is negative. Sell vehicles/warehouses to continue.");
+      } else {
+        btn.classList.remove("debt-blocked");
+        btn.textContent = wasSetup ? "▶ Start Game" : "▶ Run Quarter";
+        btn.removeAttribute("title");
+      }
     });
 }
 
@@ -1816,10 +1895,24 @@ function updateHUD() {
     ? "Setup"
     : "Q"+state.currentQuarter+" / "+state.totalQuarters;
   var runBtn = document.getElementById("run-btn");
-  if (!runBtn.disabled) {
+  if (state.cash < 0) {
+    runBtn.disabled = true;
+    runBtn.classList.add("debt-blocked");
+    runBtn.textContent = "⚠️ Resolve Debt";
+    runBtn.setAttribute("title", "Cash is negative. Sell vehicles/warehouses to continue.");
+  } else {
+    runBtn.disabled = false;
+    runBtn.classList.remove("debt-blocked");
     runBtn.textContent = state.currentQuarter===0 ? "▶ Start Game" : "▶ Run Quarter";
+    runBtn.removeAttribute("title");
   }
-  document.getElementById("hud-cash").textContent = "$"+state.cash.toLocaleString();
+  var cashEl = document.getElementById("hud-cash");
+  cashEl.textContent = (state.cash < 0 ? "−" : "") + "$" + Math.abs(state.cash).toLocaleString();
+  if (state.cash < 0) {
+    cashEl.className = "stat-val neg";
+  } else {
+    cashEl.className = "stat-val g";
+  }
   updatePendingVehicleIndicator(state.pendingVehicleNetCost);
   var last = state.quarterlyResults[state.quarterlyResults.length-1];
   if (last) {
@@ -1853,6 +1946,35 @@ function updateSidebar() {
 function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
 function fmt(n){ return n.toLocaleString(); }
 function fmtK(n){ return Math.abs(n)>=1000 ? Math.round(n/1000)+"k" : Math.round(n)+""; }
+
+function showPanelError(message) {
+  var el = document.getElementById("wh-panel-error");
+  if (el) {
+    el.innerHTML = '<span style="font-size:13px">⚠️</span> <span>' + message + '</span>';
+    el.style.display = "flex";
+  }
+}
+function clearPanelError() {
+  var el = document.getElementById("wh-panel-error");
+  if (el) {
+    el.style.display = "none";
+    el.innerHTML = "";
+  }
+}
+var globalErrorTimeout = null;
+function showGlobalError(message) {
+  var el = document.getElementById("global-error-banner");
+  if (el) {
+    el.innerHTML = '<span>⚠️ ' + message + '</span><button onclick="hideGlobalError()">&times;</button>';
+    el.style.display = "flex";
+    if (globalErrorTimeout) clearTimeout(globalErrorTimeout);
+    globalErrorTimeout = setTimeout(hideGlobalError, 8000);
+  }
+}
+function hideGlobalError() {
+  var el = document.getElementById("global-error-banner");
+  if (el) el.style.display = "none";
+}
 </script>
 </body>
 </html>
