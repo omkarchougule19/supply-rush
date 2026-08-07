@@ -286,26 +286,29 @@
     .wh-fulfill-bar { height:7px; background:var(--border); border-radius:4px; overflow:hidden; }
     .wh-fulfill-fill { height:100%; border-radius:4px; transition:width .25s ease; }
 
-    /* RESULTS POPUP */
-    /* DELIVERY ANIMATION */
-    .delivery-banner { position:absolute; top:14px; left:50%; transform:translateX(-50%); background:rgba(10,18,32,.92); border:1px solid var(--border); border-radius:10px; padding:9px 20px; font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:13px; color:var(--accent); z-index:41; pointer-events:none; white-space:nowrap; box-shadow:0 4px 16px rgba(0,0,0,.35); }
-    .delivery-vehicle { position:absolute; transform:translate(-50%,-50%); font-size:17px; transition: left 1.4s ease-in-out, top 1.4s ease-in-out, transform 1.4s ease-in-out; pointer-events:none; z-index:40; filter:drop-shadow(0 0 4px rgba(0,0,0,.6)); }
-
-    #results-overlay { position:fixed; inset:0; background:rgba(7,13,24,.78); z-index:80; display:none; align-items:center; justify-content:center; }
-    #results-overlay.show { display:flex; }
-    .results-box { width:540px; background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:32px 30px; }
-    .results-title { font-family:'Space Grotesk',sans-serif; font-size:20px; font-weight:700; margin-bottom:4px; }
-    .results-sub { font-size:13px; color:var(--muted); margin-bottom:22px; }
-    .r-activated-callout { display:flex; align-items:center; gap:10px; background:rgba(255,210,74,.1); border:1px solid rgba(255,210,74,.35); border-radius:10px; padding:11px 14px; margin:-8px 0 20px; font-size:13px; font-weight:600; color:var(--accent); }
-    .r-activated-callout .icon { font-size:18px; }
-    .results-grid { display:grid; grid-template-columns:1fr 1fr; gap:11px; margin-bottom:20px; }
-    .r-card { background:var(--card); border-radius:10px; padding:13px 15px; }
-    .r-card.wide { grid-column:span 2; }
-    .r-label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:4px; }
-    .r-val { font-size:20px; font-weight:700; }
-    .r-bar { height:3px; background:var(--border); border-radius:2px; margin-top:8px; }
+    /* RESULTS SIDEBAR (replaces legend after each quarter) */
+    #results-sidebar { width:190px; background:var(--surface); border-left:1px solid var(--border); flex-shrink:0; overflow-y:auto; display:none; flex-direction:column; }
+    #results-sidebar.show { display:flex; }
+    .rsb-next-btn { width:100%; padding:11px 10px; background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#0a1220; border:none; font-size:13px; font-weight:700; font-family:'Space Grotesk',sans-serif; cursor:pointer; flex-shrink:0; letter-spacing:.02em; }
+    .rsb-next-btn:hover { opacity:.88; }
+    .rsb-body { padding:14px 12px; overflow-y:auto; flex:1; }
+    .rsb-title { font-family:'Space Grotesk',sans-serif; font-size:13px; font-weight:700; color:var(--accent); margin-bottom:2px; }
+    .rsb-sub { font-size:10px; color:var(--muted); margin-bottom:12px; }
+    .r-activated-callout { display:flex; align-items:flex-start; gap:7px; background:rgba(255,210,74,.1); border:1px solid rgba(255,210,74,.35); border-radius:8px; padding:9px 10px; margin-bottom:12px; font-size:11px; font-weight:600; color:var(--accent); }
+    .r-activated-callout .icon { font-size:14px; flex-shrink:0; }
+    .rsb-grid { display:flex; flex-direction:column; gap:8px; }
+    .r-card { background:var(--card); border-radius:9px; padding:10px 11px; }
+    .r-label { font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:3px; }
+    .r-val { font-size:16px; font-weight:700; }
+    .r-val-sm { font-size:13px; font-weight:700; }
+    .r-bar { height:3px; background:var(--border); border-radius:2px; margin-top:7px; }
     .r-fill { height:3px; border-radius:2px; }
-    .results-next-btn { width:100%; padding:13px; background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#0a1220; border:none; border-radius:10px; font-size:15px; font-weight:700; font-family:'Space Grotesk',sans-serif; cursor:pointer; }
+    /* demand dot faded when served */
+    .demand-spot.served { opacity:0.28; }
+
+    /* keep old overlay hidden — no longer used */
+    #results-overlay { display:none !important; }
+
 
     /* GAME OVER */
     #gameover-overlay { position:fixed; inset:0; background:rgba(7,13,24,.92); z-index:90; display:none; align-items:flex-start; justify-content:center; overflow-y:auto; padding:24px 16px; }
@@ -427,7 +430,7 @@
         <div class="map-corner br"></div>
       </div>
     </div>
-    <div class="legend-panel">
+    <div class="legend-panel" id="legend-panel">
       <div class="lp-title">Legend</div>
       <div class="lp-section">Demand</div>
       <div class="lp-row"><div class="lp-dot" style="background:var(--red)"></div><div class="lp-label">Urgent order</div></div>
@@ -442,6 +445,12 @@
       <div class="lp-section">Mode</div>
       <div style="font-size:11px;color:var(--muted)" id="legend-mode">Normal</div>
     </div>
+
+    <!-- RESULTS SIDEBAR — shown after each quarter, replaces legend -->
+    <div id="results-sidebar">
+      <!-- button injected at top by showResults() -->
+    </div>
+
   </div>
 </div>
 
@@ -1537,6 +1546,13 @@ function closeWhPanel() {
 function runQuarter() {
   var btn = document.getElementById("run-btn");
   var wasSetup = state.currentQuarter === 0;
+  // Ensure results sidebar is dismissed if still open
+  var rSidebar = document.getElementById("results-sidebar");
+  var rLegend  = document.getElementById("legend-panel");
+  if (rSidebar && rSidebar.classList.contains("show")) {
+    rSidebar.classList.remove("show");
+    if (rLegend) rLegend.style.display = "";
+  }
   btn.disabled = true; btn.textContent = wasSetup ? "Starting..." : "Running...";
 
   var quarterLabel = wasSetup ? 1 : state.currentQuarter;
@@ -1625,6 +1641,7 @@ function runQuarter() {
       warehouse_type_utilization:result.warehouse_type_utilization||{},
       drone_cost:result.drone_cost||0, truck_cost:result.truck_cost||0});
     updateHUD(); updateSidebar();
+    renderRemainingDemand(result);
     showResults(q, result, newlyActivated);
   }
 
@@ -1766,46 +1783,115 @@ function localSim() {
 }
 
 /* ── RESULTS ── */
-function showResults(q, r, newlyActivated) {
-  document.getElementById("r-title").textContent = "Q"+q+" Results";
-  document.getElementById("r-sub").textContent = "Quarter "+q+" of "+state.totalQuarters+" complete";
+/* ── REMAINING DEMAND on dots after quarter ── */
+function renderRemainingDemand(r) {
+  var totalUrgent    = (state.urgentSpots||[]).reduce(function(s,z){return s+z.orders;},0);
+  var totalNonurgent = (state.nonurgentSpots||[]).reduce(function(s,z){return s+z.orders;},0);
+  var urgentSO    = r.urgent_stockouts    || 0;
+  var nonurgentSO = r.nonurgent_stockouts || 0;
 
-  var activatedEl = document.getElementById("r-activated");
+  var mc = document.getElementById("mapContent");
+
+  (state.urgentSpots||[]).forEach(function(z) {
+    var remaining = totalUrgent > 0 ? Math.round(z.orders * urgentSO / totalUrgent) : 0;
+    // update label
+    var lbl = mc.querySelector(".demand-label[data-zone-id='"+z.zone_id+"']");
+    if (lbl) lbl.textContent = remaining > 0 ? remaining.toLocaleString() : "0";
+    // dim dot if fully served
+    var dot = mc.querySelector(".demand-spot.urgent[style*='left:"+z.x+"%']");
+    if (dot) {
+      if (remaining === 0) dot.classList.add("served");
+      else dot.classList.remove("served");
+    }
+  });
+
+  (state.nonurgentSpots||[]).forEach(function(z) {
+    var remaining = totalNonurgent > 0 ? Math.round(z.orders * nonurgentSO / totalNonurgent) : 0;
+    var lbl = mc.querySelector(".demand-label[data-zone-id='"+z.zone_id+"']");
+    if (lbl) lbl.textContent = remaining > 0 ? remaining.toLocaleString() : "0";
+    var dot = mc.querySelector(".demand-spot.nonurgent[style*='left:"+z.x+"%']");
+    if (dot) {
+      if (remaining === 0) dot.classList.add("served");
+      else dot.classList.remove("served");
+    }
+  });
+}
+
+function dismissResultsSidebar(callback) {
+  var sidebar = document.getElementById("results-sidebar");
+  var legend  = document.getElementById("legend-panel");
+  sidebar.classList.remove("show");
+  legend.style.display = "";
+  if (callback) callback();
+}
+
+function showResults(q, r, newlyActivated) {
+  var isLast = r.completed || state.completed;
+  var sidebar = document.getElementById("results-sidebar");
+  var legend  = document.getElementById("legend-panel");
+
+  // Build "Start Q→" / "See Final Results →" button at top
+  var btnLabel = isLast ? "See Final Results \u2192" : "Start Q"+state.currentQuarter+" \u2192";
+  var btnAction = isLast
+    ? "dismissResultsSidebar(showGameOver)"
+    : "dismissResultsSidebar(fetchDemand)";
+
+  // Build activated callout
+  var activatedHtml = "";
   if (newlyActivated && newlyActivated.length) {
     var names = newlyActivated.map(function(wh){ return cap(wh.warehouseType); }).join(", ");
-    var verb = newlyActivated.length===1 ? "warehouse became" : "warehouses became";
-    activatedEl.innerHTML = '<div class="r-activated-callout"><span class="icon">🏭</span>'
-      + '<span>'+names+' '+verb+' active this quarter — now serving demand.</span></div>';
-  } else {
-    activatedEl.innerHTML = "";
+    var verb  = newlyActivated.length===1 ? "warehouse became" : "warehouses became";
+    activatedHtml = '<div class="r-activated-callout"><span class="icon">\uD83C\uDFED</span>'
+      +'<span>'+names+' '+verb+' active \u2014 now serving.</span></div>';
   }
 
-  var pc=r.profit>=0?"var(--green)":"var(--red)", ps=r.profit>=0?"+":"";
-  document.getElementById("r-grid").innerHTML =
-    '<div class="r-card wide"><div class="r-label">Net Profit / Loss</div><div class="r-val" style="color:'+pc+'">'+ps+'$'+fmtK(r.profit)+'</div></div>'
-    +'<div class="r-card"><div class="r-label">Revenue (Urgent)</div><div class="r-val" style="color:var(--green)">$'+fmtK(r.urgent_revenue || 0)+'</div></div>'
-    +'<div class="r-card"><div class="r-label">Revenue (Non-Urgent)</div><div class="r-val" style="color:var(--green)">$'+fmtK(r.nonurgent_revenue || 0)+'</div></div>'
-    +'<div class="r-card"><div class="r-label">Truck Utilization</div><div class="r-val">'+Math.round((r.truck_utilization || 0)*100)+'%</div>'
-    +'<div class="r-bar"><div class="r-fill" style="width:'+Math.round((r.truck_utilization || 0)*100)+'%;background:var(--accent)"></div></div></div>'
-    +'<div class="r-card"><div class="r-label">Drone Utilization</div><div class="r-val">'+Math.round((r.drone_utilization || 0)*100)+'%</div>'
-    +'<div class="r-bar"><div class="r-fill" style="width:'+Math.round((r.drone_utilization || 0)*100)+'%;background:var(--blue)"></div></div></div>'
-    +'<div class="r-card"><div class="r-label">Stockouts (Urgent)</div><div class="r-val" style="color:var(--red)">'+(r.urgent_stockouts || 0).toLocaleString()+'</div></div>'
-    +'<div class="r-card"><div class="r-label">Stockouts (Non-Urgent)</div><div class="r-val" style="color:var(--red)">'+(r.nonurgent_stockouts || 0).toLocaleString()+'</div></div>'
-    +'<div class="r-card"><div class="r-label">Op. Cost</div><div class="r-val" style="color:var(--red)">$'+fmtK(r.operating_cost)+'</div></div>'
-    +'<div class="r-card"><div class="r-label">Cash After</div><div class="r-val">$'+fmtK(state.cash)+'</div></div>'
-    +'<div class="r-card wide"><div class="r-label">Orders Served</div><div class="r-val">'+r.orders_fulfilled.toLocaleString()+'<span style="font-size:12px;color:var(--muted)"> / '+r.orders_total.toLocaleString()+'</span></div>'
-    +'<div class="r-bar"><div class="r-fill" style="width:'+Math.round(r.serving_pct*100)+'%;background:var(--blue)"></div></div></div>';
+  // Build cards (compact for narrow sidebar)
+  var pc = r.profit>=0 ? "var(--green)" : "var(--red)";
+  var ps = r.profit>=0 ? "+" : "";
+  var tu = Math.round((r.truck_utilization||0)*100);
+  var du = Math.round((r.drone_utilization||0)*100);
+  var sp = Math.round(r.serving_pct*100);
 
-  var btn = document.getElementById("r-next-btn");
-  if (r.completed || state.completed) {
-    btn.textContent = "See Final Results →";
-    btn.onclick = function(){ document.getElementById("results-overlay").classList.remove("show"); showGameOver(); };
-  } else {
-    btn.textContent = "Start Q"+state.currentQuarter+" →";
-    btn.onclick = function(){ document.getElementById("results-overlay").classList.remove("show"); fetchDemand(); };
-  }
-  document.getElementById("results-overlay").classList.add("show");
+  var cards =
+    '<div class="r-card"><div class="r-label">Net P &amp; L</div>'
+      +'<div class="r-val" style="color:'+pc+'">'+ps+'$'+fmtK(r.profit)+'</div></div>'
+    +'<div class="r-card"><div class="r-label">Revenue — Urgent</div>'
+      +'<div class="r-val-sm" style="color:var(--green)">$'+fmtK(r.urgent_revenue||0)+'</div></div>'
+    +'<div class="r-card"><div class="r-label">Revenue — Non-Urgent</div>'
+      +'<div class="r-val-sm" style="color:var(--green)">$'+fmtK(r.nonurgent_revenue||0)+'</div></div>'
+    +'<div class="r-card"><div class="r-label">Truck Util.</div>'
+      +'<div class="r-val-sm">'+tu+'%</div>'
+      +'<div class="r-bar"><div class="r-fill" style="width:'+tu+'%;background:var(--accent)"></div></div></div>'
+    +'<div class="r-card"><div class="r-label">Drone Util.</div>'
+      +'<div class="r-val-sm">'+du+'%</div>'
+      +'<div class="r-bar"><div class="r-fill" style="width:'+du+'%;background:var(--blue)"></div></div></div>'
+    +'<div class="r-card"><div class="r-label">Stockouts — Urgent</div>'
+      +'<div class="r-val-sm" style="color:var(--red)">'+(r.urgent_stockouts||0).toLocaleString()+'</div></div>'
+    +'<div class="r-card"><div class="r-label">Stockouts — Non-Urg.</div>'
+      +'<div class="r-val-sm" style="color:var(--red)">'+(r.nonurgent_stockouts||0).toLocaleString()+'</div></div>'
+    +'<div class="r-card"><div class="r-label">Op. Cost</div>'
+      +'<div class="r-val-sm" style="color:var(--red)">$'+fmtK(r.operating_cost)+'</div></div>'
+    +'<div class="r-card"><div class="r-label">Cash After</div>'
+      +'<div class="r-val-sm">$'+fmtK(state.cash)+'</div></div>'
+    +'<div class="r-card"><div class="r-label">Orders Served</div>'
+      +'<div class="r-val-sm">'+r.orders_fulfilled.toLocaleString()
+        +' <span style="font-size:10px;color:var(--muted)">/ '+r.orders_total.toLocaleString()+'</span></div>'
+      +'<div class="r-bar"><div class="r-fill" style="width:'+sp+'%;background:var(--blue)"></div></div></div>';
+
+  sidebar.innerHTML =
+    '<button class="rsb-next-btn" onclick="'+btnAction+'">'+btnLabel+'</button>'
+    +'<div class="rsb-body">'
+      +'<div class="rsb-title">Q'+q+' Results</div>'
+      +'<div class="rsb-sub">Quarter '+q+' of '+state.totalQuarters+' complete</div>'
+      +activatedHtml
+      +'<div class="rsb-grid">'+cards+'</div>'
+    +'</div>';
+
+  // Swap: hide legend, show sidebar
+  legend.style.display = "none";
+  sidebar.classList.add("show");
 }
+
 
 /* ── GAME OVER ── */
 var goCharts = [];
