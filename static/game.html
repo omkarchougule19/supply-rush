@@ -1621,7 +1621,9 @@ function runQuarter() {
       urgent_revenue:result.urgent_revenue, nonurgent_revenue:result.nonurgent_revenue,
       drone_utilization:result.drone_utilization, truck_utilization:result.truck_utilization,
       urgent_stockouts:result.urgent_stockouts, nonurgent_stockouts:result.nonurgent_stockouts,
-      urgent_fulfilled:result.urgent_fulfilled||0, nonurgent_fulfilled:result.nonurgent_fulfilled||0});
+      urgent_fulfilled:result.urgent_fulfilled||0, nonurgent_fulfilled:result.nonurgent_fulfilled||0,
+      warehouse_type_utilization:result.warehouse_type_utilization||{},
+      drone_cost:result.drone_cost||0, truck_cost:result.truck_cost||0});
     updateHUD(); updateSidebar();
     showResults(q, result, newlyActivated);
   }
