@@ -1641,7 +1641,7 @@ function runQuarter() {
     state.cash = result.cash_after;
     state.currentQuarter = result.next_quarter || (q+1);
     state.completed = result.completed || state.currentQuarter > state.totalQuarters;
-    renderSlots();
+    renderSlots(); renderRoutes();
     btn.disabled = false; btn.textContent = "▶ Run Quarter";
 
     if (wasSetup) {
