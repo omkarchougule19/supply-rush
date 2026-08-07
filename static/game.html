@@ -133,6 +133,9 @@
     .m-val { font-size:16px; font-weight:700; color:#fff; }
     .m-bar { height:3px; background:var(--border); border-radius:2px; margin-top:6px; }
     .m-fill { height:3px; border-radius:2px; transition:width .4s ease; }
+    /* P&L chart wrapper */
+    .pl-chart-wrap { padding:0 14px 10px; }
+    .pl-chart-wrap canvas { width:100% !important; }
 
     /* MAP */
     .map-wrap { flex:1; position:relative; overflow:auto;
@@ -204,7 +207,7 @@
     .map-corner.br { bottom:8px; right:8px; border-bottom:2px solid var(--accent); border-right:2px solid var(--accent); }
 
     /* LEGEND */
-    .legend-panel { width:clamp(120px, 14vw, 190px); background:var(--surface); border-left:1px solid var(--border); flex-shrink:0; padding:16px clamp(8px,1.5vw,14px); overflow-y:auto; }
+    .legend-panel { width:clamp(160px, 20vw, 280px); background:var(--surface); border-left:1px solid var(--border); flex-shrink:0; padding:16px clamp(10px,1.5vw,16px); overflow-y:auto; }
     .lp-title { font-family:'Space Grotesk',sans-serif; font-size:12px; font-weight:700; color:var(--text); letter-spacing:.04em; margin-bottom:12px; text-transform:uppercase; }
     .lp-row { display:flex; align-items:center; gap:8px; margin-bottom:9px; }
     .lp-dot { width:11px; height:11px; border-radius:50%; flex-shrink:0; }
@@ -408,7 +411,7 @@
         <div class="forecast-note">Drones count toward both — their capacity is shared, not doubled.</div>
       </div>
       <div class="sb-head">P&amp;L History</div>
-      <div id="pl-history"></div>
+      <div class="pl-chart-wrap"><canvas id="pl-chart" height="90"></canvas></div>
       <div class="sb-metrics">
         <div class="m-card">
           <div class="m-label">Utilization</div>
@@ -620,6 +623,7 @@ function exitToHome(discard) {
   // Reset state
   state.playId = null; state.completed = false;
   state.quarterlyResults = []; state.placedWarehouses = [];
+  if (plChart) { plChart.destroy(); plChart = null; }
   // Go back to entry screen via hash
   window.location.hash = "";
   document.getElementById("game-ui").className = "";
@@ -972,7 +976,11 @@ function renderRoutes() {
   var mc  = document.getElementById("mapContent");
   var W = mc.offsetWidth, H = mc.offsetHeight;
   svg.innerHTML = "";
-  if (!W||!H) return;
+  // If the map hasn't been laid out yet (W/H still 0), defer one animation frame
+  if (!W || !H) {
+    requestAnimationFrame(renderRoutes);
+    return;
+  }
   svg.setAttribute("viewBox","0 0 "+W+" "+H);
 
   var pairs = computeZoneAssignments();
@@ -2153,13 +2161,44 @@ function updateHUD() {
     document.getElementById("hud-serving").textContent = Math.round(last.serving_pct*100)+"%";
   }
 }
+/* ── P&L HISTORY CHART ── */
+var plChart = null;
 function updateSidebar() {
-  var hist = document.getElementById("pl-history");
-  hist.innerHTML = state.quarterlyResults.map(function(q,i){
-    var last = i===state.quarterlyResults.length-1;
-    return '<div class="hist-row'+(last?' now':'')+'"><span class="hist-q">Q'+q.quarter+(last?' ←':'')+'</span>'
-      +'<span class="hist-v '+(q.profit>=0?'pos':'neg')+'">'+(q.profit>=0?'+':'-')+'$'+fmtK(Math.abs(q.profit))+'</span></div>';
-  }).join('');
+  // -- P&L bar chart --
+  var labels  = state.quarterlyResults.map(function(q){ return "Q"+q.quarter; });
+  var profits = state.quarterlyResults.map(function(q){ return Math.round(q.profit); });
+  var colors  = profits.map(function(p){ return p >= 0 ? "rgba(74,222,128,0.82)" : "rgba(248,113,113,0.82)"; });
+  var borders = profits.map(function(p){ return p >= 0 ? "rgba(74,222,128,1)" : "rgba(248,113,113,1)"; });
+  var canvas  = document.getElementById("pl-chart");
+  if (canvas) {
+    if (!plChart) {
+      plChart = new Chart(canvas.getContext("2d"), {
+        type: "bar",
+        data: { labels: labels, datasets: [{ data: profits, backgroundColor: colors, borderColor: borders, borderWidth: 1, borderRadius: 3 }] },
+        options: {
+          animation: { duration: 300 },
+          plugins: { legend: { display: false }, tooltip: {
+            callbacks: { label: function(ctx){ var v=ctx.parsed.y; return (v>=0?"+$":"-$")+Math.abs(Math.round(v)).toLocaleString(); } },
+            backgroundColor: "rgba(10,18,32,.95)", titleColor: "#e2e8f5", bodyColor: "#e2e8f5",
+            titleFont: { family: "Space Grotesk", size: 11 }, bodyFont: { family: "Inter", size: 11 },
+            borderColor: "rgba(255,210,74,.25)", borderWidth: 1, padding: 8
+          }},
+          scales: {
+            x: { ticks: { color: "#5878a8", font: { size: 8, family: "Inter" }, maxRotation: 0 }, grid: { display: false }, border: { display: false } },
+            y: { display: false, grid: { display: false } }
+          },
+          layout: { padding: { top: 4, bottom: 0 } },
+          maintainAspectRatio: false
+        }
+      });
+    } else {
+      plChart.data.labels = labels;
+      plChart.data.datasets[0].data = profits;
+      plChart.data.datasets[0].backgroundColor = colors;
+      plChart.data.datasets[0].borderColor = borders;
+      plChart.update("none");
+    }
+  }
   var last = state.quarterlyResults[state.quarterlyResults.length-1];
   if (last) {
     var u=Math.round(last.utilization_rate*100), s=Math.round(last.serving_pct*100);
