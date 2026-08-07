@@ -111,7 +111,7 @@
     .game-body { display:flex; flex:1; overflow:hidden; }
 
     /* SIDEBAR */
-    .sidebar { width:200px; background:var(--surface); border-right:1px solid var(--border); flex-shrink:0; overflow-y:auto; display:flex; flex-direction:column; }
+    .sidebar { width:280px; background:var(--surface); border-right:1px solid var(--border); flex-shrink:0; overflow-y:auto; display:flex; flex-direction:column; }
     .sb-head { padding:14px 14px 8px; font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }
     .hist-row { display:flex; justify-content:space-between; align-items:center; padding:6px 14px; border-left:3px solid transparent; }
     .hist-row.now { border-left-color:var(--accent); background:var(--card); }
@@ -286,8 +286,12 @@
     .wh-fulfill-bar { height:7px; background:var(--border); border-radius:4px; overflow:hidden; }
     .wh-fulfill-fill { height:100%; border-radius:4px; transition:width .25s ease; }
 
+    /* DELIVERY ANIMATION */
+    .delivery-banner { position:absolute; top:14px; left:50%; transform:translateX(-50%); background:rgba(10,18,32,.92); border:1px solid var(--border); border-radius:10px; padding:9px 20px; font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:13px; color:var(--accent); z-index:41; pointer-events:none; white-space:nowrap; box-shadow:0 4px 16px rgba(0,0,0,.35); }
+    .delivery-vehicle { position:absolute; transform:translate(-50%,-50%); font-size:17px; transition: left 1.4s ease-in-out, top 1.4s ease-in-out, transform 1.4s ease-in-out; pointer-events:none; z-index:40; filter:drop-shadow(0 0 4px rgba(0,0,0,.6)); }
+
     /* RESULTS SIDEBAR (replaces legend after each quarter) */
-    #results-sidebar { width:190px; background:var(--surface); border-left:1px solid var(--border); flex-shrink:0; overflow-y:auto; display:none; flex-direction:column; }
+    #results-sidebar { width:280px; background:var(--surface); border-left:1px solid var(--border); flex-shrink:0; overflow-y:auto; display:none; flex-direction:column; }
     #results-sidebar.show { display:flex; }
     .rsb-next-btn { width:100%; padding:11px 10px; background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#0a1220; border:none; font-size:13px; font-weight:700; font-family:'Space Grotesk',sans-serif; cursor:pointer; flex-shrink:0; letter-spacing:.02em; }
     .rsb-next-btn:hover { opacity:.88; }
@@ -1546,6 +1550,8 @@ function closeWhPanel() {
 function runQuarter() {
   var btn = document.getElementById("run-btn");
   var wasSetup = state.currentQuarter === 0;
+  // Close warehouse panel if open
+  document.getElementById("wh-panel").classList.remove("open");
   // Ensure results sidebar is dismissed if still open
   var rSidebar = document.getElementById("results-sidebar");
   var rLegend  = document.getElementById("legend-panel");
