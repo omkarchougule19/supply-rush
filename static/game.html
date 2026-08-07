@@ -308,9 +308,9 @@
     .results-next-btn { width:100%; padding:13px; background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#0a1220; border:none; border-radius:10px; font-size:15px; font-weight:700; font-family:'Space Grotesk',sans-serif; cursor:pointer; }
 
     /* GAME OVER */
-    #gameover-overlay { position:fixed; inset:0; background:rgba(7,13,24,.92); z-index:90; display:none; align-items:center; justify-content:center; overflow-y:auto; padding:24px 0; }
+    #gameover-overlay { position:fixed; inset:0; background:rgba(7,13,24,.92); z-index:90; display:none; align-items:flex-start; justify-content:center; overflow-y:auto; padding:24px 16px; }
     #gameover-overlay.show { display:flex; }
-    .gameover-box { width:620px; max-height:calc(100vh - 48px); overflow-y:auto; background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:40px 36px; text-align:center; }
+    .gameover-box { width:min(92vw,920px); background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:40px 36px; text-align:center; flex-shrink:0; margin:auto; }
     .gameover-icon { font-size:52px; margin-bottom:14px; }
     .gameover-title { font-family:'Space Grotesk',sans-serif; font-size:26px; font-weight:700; color:var(--accent); margin-bottom:8px; }
     .gameover-sub { font-size:14px; color:var(--muted); margin-bottom:28px; }
@@ -318,10 +318,11 @@
     .go-stat { background:var(--card); border-radius:10px; padding:14px; }
     .go-label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:4px; }
     .go-val { font-size:18px; font-weight:700; }
-    .go-charts { display:flex; flex-direction:column; gap:20px; margin-bottom:28px; }
-    .go-chart-card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:18px 20px; text-align:left; }
+    .go-charts { display:grid; grid-template-columns:repeat(2,1fr); gap:16px; margin-bottom:28px; }
+    @media(max-width:700px){ .go-charts{ grid-template-columns:1fr; } }
+    .go-chart-card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:18px 20px; text-align:left; min-width:0; }
     .go-chart-title { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:12px; font-weight:600; }
-    .go-chart-card canvas { width:100% !important; height:180px !important; }
+    .go-chart-card canvas { width:100% !important; height:190px !important; }
     .gameover-btn { padding:13px 32px; background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#0a1220; border:none; border-radius:10px; font-size:14px; font-weight:700; font-family:'Space Grotesk',sans-serif; cursor:pointer; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
@@ -496,6 +497,22 @@
       <div class="go-chart-card">
         <div class="go-chart-title">Orders Delivered — Urgent vs Non-Urgent</div>
         <canvas id="chart-orders"></canvas>
+      </div>
+      <div class="go-chart-card">
+        <div class="go-chart-title">% Demand Satisfied — Urgent vs Non-Urgent</div>
+        <canvas id="chart-demand-pct"></canvas>
+      </div>
+      <div class="go-chart-card">
+        <div class="go-chart-title">Avg Utilization by Warehouse Category</div>
+        <canvas id="chart-wh-util"></canvas>
+      </div>
+      <div class="go-chart-card">
+        <div class="go-chart-title">Revenue vs Spending</div>
+        <canvas id="chart-rev-spend"></canvas>
+      </div>
+      <div class="go-chart-card">
+        <div class="go-chart-title">Spending Breakdown — Drone vs Truck</div>
+        <canvas id="chart-spend-stack"></canvas>
       </div>
     </div>
     <button class="gameover-btn" onclick="location.reload()">Play Again</button>
@@ -1867,6 +1884,116 @@ function showGameOver() {
       ]
     },
     options: baseOpts
+  }));
+
+  // Chart 4 — % Demand Satisfied per type
+  var pctOpts = Object.assign({}, baseOpts, {
+    scales: Object.assign({}, baseOpts.scales, {
+      y: Object.assign({}, baseOpts.scales.y, {
+        max: 100,
+        ticks: Object.assign({}, baseOpts.scales.y.ticks, { callback: function(v){ return v+'%'; } })
+      })
+    })
+  });
+  goCharts.push(new Chart(document.getElementById('chart-demand-pct'), {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: 'Urgent %',
+          data: state.quarterlyResults.map(function(q){
+            var tot = (q.urgent_fulfilled||0) + (q.urgent_stockouts||0);
+            return tot > 0 ? Math.round((q.urgent_fulfilled||0) / tot * 100) : 0;
+          }),
+          borderColor: '#F87171', backgroundColor: 'rgba(248,113,113,.12)',
+          tension: 0.3, fill: true, pointRadius: 3, borderWidth: 2 },
+        { label: 'Non-Urgent %',
+          data: state.quarterlyResults.map(function(q){
+            var tot = (q.nonurgent_fulfilled||0) + (q.nonurgent_stockouts||0);
+            return tot > 0 ? Math.round((q.nonurgent_fulfilled||0) / tot * 100) : 0;
+          }),
+          borderColor: '#60C8FF', backgroundColor: 'rgba(96,200,255,.12)',
+          tension: 0.3, fill: true, pointRadius: 3, borderWidth: 2 }
+      ]
+    },
+    options: pctOpts
+  }));
+
+  // Chart 5 — Avg utilization by warehouse category
+  var whUtilDatasets = [];
+  var whColors = { small: ['#A78BFA','rgba(167,139,250,.15)'], medium: ['#FFD24A','rgba(255,210,74,.15)'], large: ['#4ADE80','rgba(74,222,128,.15)'] };
+  ['small','medium','large'].forEach(function(wtype) {
+    var hasData = state.quarterlyResults.some(function(q){ return q.warehouse_type_utilization && q.warehouse_type_utilization[wtype] !== null && q.warehouse_type_utilization[wtype] !== undefined; });
+    if (!hasData) return;
+    var col = whColors[wtype];
+    whUtilDatasets.push({
+      label: wtype.charAt(0).toUpperCase()+wtype.slice(1),
+      data: state.quarterlyResults.map(function(q){
+        var v = q.warehouse_type_utilization && q.warehouse_type_utilization[wtype];
+        return (v !== null && v !== undefined) ? Math.round(v * 100) : null;
+      }),
+      borderColor: col[0], backgroundColor: col[1],
+      tension: 0.3, fill: false, pointRadius: 3, borderWidth: 2, spanGaps: true
+    });
+  });
+  goCharts.push(new Chart(document.getElementById('chart-wh-util'), {
+    type: 'line',
+    data: { labels: labels, datasets: whUtilDatasets.length ? whUtilDatasets : [{ label: 'No data', data: [] }] },
+    options: Object.assign({}, pctOpts, {
+      plugins: Object.assign({}, pctOpts.plugins, {
+        legend: Object.assign({}, pctOpts.plugins.legend)
+      })
+    })
+  }));
+
+  // Chart 6 — Revenue vs Spending
+  goCharts.push(new Chart(document.getElementById('chart-rev-spend'), {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: 'Revenue',
+          data: state.quarterlyResults.map(function(q){ return Math.round(q.revenue||0); }),
+          borderColor: '#4ADE80', backgroundColor: 'rgba(74,222,128,.1)',
+          tension: 0.3, fill: true, pointRadius: 3, borderWidth: 2 },
+        { label: 'Operating Cost',
+          data: state.quarterlyResults.map(function(q){ return Math.round(q.operating_cost||0); }),
+          borderColor: '#F87171', backgroundColor: 'rgba(248,113,113,.08)',
+          tension: 0.3, fill: true, pointRadius: 3, borderWidth: 2 }
+      ]
+    },
+    options: Object.assign({}, baseOpts, {
+      scales: Object.assign({}, baseOpts.scales, {
+        y: Object.assign({}, baseOpts.scales.y, {
+          ticks: Object.assign({}, baseOpts.scales.y.ticks, { callback: function(v){ return '$'+fmtK(v); } })
+        })
+      })
+    })
+  }));
+
+  // Chart 7 — Stacked spending breakdown: Drone vs Truck
+  goCharts.push(new Chart(document.getElementById('chart-spend-stack'), {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: 'Drone Cost',
+          data: state.quarterlyResults.map(function(q){ return Math.round(q.drone_cost||0); }),
+          backgroundColor: 'rgba(96,200,255,.75)', borderColor: '#60C8FF', borderWidth: 1 },
+        { label: 'Truck Cost',
+          data: state.quarterlyResults.map(function(q){ return Math.round(q.truck_cost||0); }),
+          backgroundColor: 'rgba(255,210,74,.75)', borderColor: '#FFD24A', borderWidth: 1 }
+      ]
+    },
+    options: Object.assign({}, baseOpts, {
+      scales: Object.assign({}, baseOpts.scales, {
+        x: Object.assign({}, baseOpts.scales.x, { stacked: true }),
+        y: Object.assign({}, baseOpts.scales.y, {
+          stacked: true,
+          ticks: Object.assign({}, baseOpts.scales.y.ticks, { callback: function(v){ return '$'+fmtK(v); } })
+        })
+      })
+    })
   }));
 
   document.getElementById("gameover-overlay").classList.add("show");

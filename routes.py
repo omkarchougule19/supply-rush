@@ -657,6 +657,7 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
     play.cash += result["profit"]
 
     # Save to QuarterResult table
+    wtu = result["warehouse_type_utilization"]
     qr = QuarterResult(
         play_id_fk=play.id,
         quarter=ran_quarter,
@@ -676,30 +677,38 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
         stockouts=result["stockouts"],
         urgent_stockouts=result["urgent_stockouts"],
         nonurgent_stockouts=result["nonurgent_stockouts"],
+        small_utilization=wtu.get("small"),
+        medium_utilization=wtu.get("medium"),
+        large_utilization=wtu.get("large"),
+        drone_cost=result["drone_cost"],
+        truck_cost=result["truck_cost"],
     )
     db.add(qr)
 
     # Mirror into Play.quarterly_results JSON
     qr_list = json.loads(play.quarterly_results)
     qr_list.append({
-        "quarter":             ran_quarter,
-        "revenue":             result["revenue"],
-        "urgent_revenue":      result["urgent_revenue"],
-        "nonurgent_revenue":   result["nonurgent_revenue"],
-        "operating_cost":      result["operating_cost"],
-        "profit":              result["profit"],
-        "cash_after":          play.cash,
-        "orders_fulfilled":    result["orders_fulfilled"],
-        "orders_total":        result["orders_total"],
-        "utilization_rate":    result["utilization_rate"],
-        "drone_utilization":   result["drone_utilization"],
-        "truck_utilization":   result["truck_utilization"],
-        "serving_pct":         result["serving_pct"],
-        "stockouts":           result["stockouts"],
-        "urgent_stockouts":    result["urgent_stockouts"],
-        "nonurgent_stockouts": result["nonurgent_stockouts"],
-        "urgent_fulfilled":    result["urgent_fulfilled"],
-        "nonurgent_fulfilled": result["nonurgent_fulfilled"],
+        "quarter":                  ran_quarter,
+        "revenue":                  result["revenue"],
+        "urgent_revenue":           result["urgent_revenue"],
+        "nonurgent_revenue":        result["nonurgent_revenue"],
+        "operating_cost":           result["operating_cost"],
+        "profit":                   result["profit"],
+        "cash_after":               play.cash,
+        "orders_fulfilled":         result["orders_fulfilled"],
+        "orders_total":             result["orders_total"],
+        "utilization_rate":         result["utilization_rate"],
+        "drone_utilization":        result["drone_utilization"],
+        "truck_utilization":        result["truck_utilization"],
+        "serving_pct":              result["serving_pct"],
+        "stockouts":                result["stockouts"],
+        "urgent_stockouts":         result["urgent_stockouts"],
+        "nonurgent_stockouts":      result["nonurgent_stockouts"],
+        "urgent_fulfilled":         result["urgent_fulfilled"],
+        "nonurgent_fulfilled":      result["nonurgent_fulfilled"],
+        "warehouse_type_utilization": result["warehouse_type_utilization"],
+        "drone_cost":               result["drone_cost"],
+        "truck_cost":               result["truck_cost"],
     })
     play.quarterly_results = json.dumps(qr_list)
 

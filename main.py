@@ -21,12 +21,18 @@ Base.metadata.create_all(bind=engine)
 from sqlalchemy import text
 with engine.connect() as conn:
     columns_to_add = [
-        ("urgent_revenue", "FLOAT", "0.0"),
-        ("nonurgent_revenue", "FLOAT", "0.0"),
-        ("drone_utilization", "FLOAT", "0.0"),
-        ("truck_utilization", "FLOAT", "0.0"),
-        ("urgent_stockouts", "INTEGER", "0"),
+        ("urgent_revenue",      "FLOAT",   "0.0"),
+        ("nonurgent_revenue",   "FLOAT",   "0.0"),
+        ("drone_utilization",   "FLOAT",   "0.0"),
+        ("truck_utilization",   "FLOAT",   "0.0"),
+        ("urgent_stockouts",    "INTEGER", "0"),
         ("nonurgent_stockouts", "INTEGER", "0"),
+        # v3 additions — per-warehouse-type utilization & per-vehicle-type cost
+        ("small_utilization",   "FLOAT",   "NULL"),
+        ("medium_utilization",  "FLOAT",   "NULL"),
+        ("large_utilization",   "FLOAT",   "NULL"),
+        ("drone_cost",          "FLOAT",   "0.0"),
+        ("truck_cost",          "FLOAT",   "0.0"),
     ]
     for col_name, col_type, default_val in columns_to_add:
         try:

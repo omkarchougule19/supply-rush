@@ -175,4 +175,13 @@ class QuarterResult(Base):
     urgent_stockouts    = Column(Integer, default=0)
     nonurgent_stockouts = Column(Integer, default=0)
 
+    # Per-warehouse-type utilization (None = that type not used this quarter)
+    small_utilization   = Column(Float, nullable=True, default=None)
+    medium_utilization  = Column(Float, nullable=True, default=None)
+    large_utilization   = Column(Float, nullable=True, default=None)
+
+    # Per-vehicle-type operating cost breakdown
+    drone_cost          = Column(Float, default=0.0)
+    truck_cost          = Column(Float, default=0.0)
+
     play = relationship("Play", back_populates="quarters")

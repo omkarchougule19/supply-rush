@@ -468,25 +468,59 @@ def simulate_quarter(
     urgent_stockouts    = total_urgent - fulfilled_urgent
     nonurgent_stockouts = total_nonurgent - fulfilled_nonurgent
 
+    # Per-warehouse-type utilization: orders_handled / total vehicle capacity for that type
+    wh_type_orders    = {}  # {type: total_orders_handled}
+    wh_type_capacity  = {}  # {type: total_vehicle_capacity}
+    for wh in active_warehouses:
+        wt = wh["warehouse_type"]
+        wh_cap = sum(v["capacity"] for v in wh["vehicles"])
+        wh_type_orders[wt]   = wh_type_orders.get(wt, 0) + wh["orders_handled"]
+        wh_type_capacity[wt] = wh_type_capacity.get(wt, 0) + wh_cap
+
+    warehouse_type_utilization = {}
+    for wt in ("small", "medium", "large"):
+        cap = wh_type_capacity.get(wt, 0)
+        ord_h = wh_type_orders.get(wt, 0)
+        warehouse_type_utilization[wt] = round(min(ord_h / cap, 1.0), 4) if cap > 0 else None
+
+    # Per-vehicle-type operating cost
+    drone_cost = 0.0
+    truck_cost = 0.0
+    for wh in warehouses:
+        if wh.is_sold or not wh.is_active:
+            continue
+        for v in json.loads(wh.vehicles):
+            if v.get("is_sold"):
+                continue
+            v_cfg = vehicle_config.get(v["type"], {})
+            op = v_cfg.get("operating_cost", 0)
+            if v["type"] == "drone":
+                drone_cost += op
+            elif v["type"] == "truck":
+                truck_cost += op
+
     return {
-        "revenue":             round(revenue, 2),
-        "urgent_revenue":      round(urgent_revenue_total, 2),
-        "nonurgent_revenue":   round(nonurgent_revenue_total, 2),
-        "operating_cost":      round(operating_cost, 2),
-        "profit":              round(profit, 2),
-        "orders_fulfilled":    total_fulfilled,
-        "orders_total":        total_demand,
-        "urgent_fulfilled":    fulfilled_urgent,
-        "urgent_total":        total_urgent,
-        "nonurgent_fulfilled": fulfilled_nonurgent,
-        "nonurgent_total":     total_nonurgent,
-        "utilization_rate":    round(min(utilization_rate, 1.0), 4),
-        "drone_utilization":   round(min(drone_utilization, 1.0), 4),
-        "truck_utilization":   round(min(truck_utilization, 1.0), 4),
-        "serving_pct":         round(min(serving_pct, 1.0), 4),
-        "stockouts":           total_demand - total_fulfilled,
-        "urgent_stockouts":    urgent_stockouts,
-        "nonurgent_stockouts": nonurgent_stockouts,
+        "revenue":                    round(revenue, 2),
+        "urgent_revenue":             round(urgent_revenue_total, 2),
+        "nonurgent_revenue":          round(nonurgent_revenue_total, 2),
+        "operating_cost":             round(operating_cost, 2),
+        "profit":                     round(profit, 2),
+        "orders_fulfilled":           total_fulfilled,
+        "orders_total":               total_demand,
+        "urgent_fulfilled":           fulfilled_urgent,
+        "urgent_total":               total_urgent,
+        "nonurgent_fulfilled":        fulfilled_nonurgent,
+        "nonurgent_total":            total_nonurgent,
+        "utilization_rate":           round(min(utilization_rate, 1.0), 4),
+        "drone_utilization":          round(min(drone_utilization, 1.0), 4),
+        "truck_utilization":          round(min(truck_utilization, 1.0), 4),
+        "serving_pct":                round(min(serving_pct, 1.0), 4),
+        "stockouts":                  total_demand - total_fulfilled,
+        "urgent_stockouts":           urgent_stockouts,
+        "nonurgent_stockouts":        nonurgent_stockouts,
+        "warehouse_type_utilization": warehouse_type_utilization,
+        "drone_cost":                 round(drone_cost, 2),
+        "truck_cost":                 round(truck_cost, 2),
         "warehouse_breakdown": [
             {"slot_id": wh["slot_id"], "orders_handled": wh["orders_handled"]}
             for wh in active_warehouses
