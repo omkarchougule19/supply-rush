@@ -1705,7 +1705,13 @@ function runQuarter() {
       drone_cost:result.drone_cost||0, truck_cost:result.truck_cost||0});
     updateHUD(); updateSidebar();
     renderRemainingDemand(result);
-    showResults(q, result, newlyActivated);
+    if (state.completed) {
+      closeWhPanel();
+      dismissResultsSidebar();
+      showGameOver();
+    } else {
+      showResults(q, result, newlyActivated);
+    }
   }
 
   if (state.playId===DEMO_ID) {
@@ -1959,6 +1965,8 @@ function showResults(q, r, newlyActivated) {
 /* ── GAME OVER ── */
 var goCharts = [];
 function showGameOver() {
+  closeWhPanel();
+  dismissResultsSidebar();
   var totalP = state.quarterlyResults.reduce(function(s,q){return s+q.profit;},0);
   var avgS   = state.quarterlyResults.reduce(function(s,q){return s+q.serving_pct;},0)/(state.quarterlyResults.length||1);
   document.getElementById("go-sub").textContent = "You completed all "+state.totalQuarters+" quarters"+(state.studentName?", "+state.studentName:"")+"!";

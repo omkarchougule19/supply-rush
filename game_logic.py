@@ -59,7 +59,7 @@ def generate_play_id() -> str:
 #  Fixed demand zone selection & reveal scheduling
 #  Called once per play, at creation time.
 # ─────────────────────────────────────────────────────────────────────────────
-ZONE_SELECTION_RATIO  = 0.6   # fraction of the master zone list used by a given play
+ZONE_SELECTION_RATIO  = 1.0   # fraction of the master zone list used by a given play
 INITIAL_REVEAL_RATIO  = 0.7   # fraction of the selected zones revealed at Quarter 0
 
 
