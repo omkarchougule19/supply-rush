@@ -650,12 +650,35 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
         "nonurgent": demand["activated_nonurgent"],
     })
 
-    # Flatten for simulation — urgent and nonurgent are separate spot lists
+    # Flatten for simulation — urgent and nonurgent are separate spot lists, retaining position info
     demand_flat = []
     for spot in demand["urgent"]:
-        demand_flat.append({"urgent_orders": spot["orders"], "nonurgent_orders": 0})
+        demand_flat.append({
+            "zone_id":          spot["zone_id"],
+            "x":                spot["x"],
+            "y":                spot["y"],
+            "urgent_orders":    spot["orders"],
+            "nonurgent_orders": 0,
+        })
     for spot in demand["nonurgent"]:
-        demand_flat.append({"urgent_orders": 0, "nonurgent_orders": spot["orders"]})
+        demand_flat.append({
+            "zone_id":          spot["zone_id"],
+            "x":                spot["x"],
+            "y":                spot["y"],
+            "urgent_orders":    0,
+            "nonurgent_orders": spot["orders"],
+        })
+
+    # Attach coordinates to warehouses from the scenario's warehouse slots
+    slots_by_id = {s["id"]: s for s in json.loads(sc.warehouse_slots)}
+    for wh in play.warehouses:
+        slot = slots_by_id.get(wh.slot_id)
+        if slot:
+            wh.x = slot["x"]
+            wh.y = slot["y"]
+        else:
+            wh.x = 0.0
+            wh.y = 0.0
 
     result = simulate_quarter(
         demand_zones=demand_flat,
@@ -665,6 +688,7 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
         urgent_revenue=sc.urgent_order_revenue,
         nonurgent_revenue=sc.nonurgent_order_revenue,
         current_quarter=ran_quarter,
+        service_radius=sc.warehouse_service_radius,
     )
 
     play.cash += result["profit"]

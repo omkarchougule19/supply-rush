@@ -353,7 +353,10 @@ def simulate_quarter(
     urgent_revenue:    float,
     nonurgent_revenue: float,
     current_quarter:   int,
+    service_radius:    float = 30.0,
 ) -> Dict:
+    import math
+
     active_warehouses = []
     for wh in warehouses:
         if wh.is_sold or not wh.is_active:
@@ -375,6 +378,8 @@ def simulate_quarter(
             })
 
         wh_cfg  = warehouse_config.get(wh.warehouse_type, {})
+        wh_x = getattr(wh, "x", 0.0)
+        wh_y = getattr(wh, "y", 0.0)
         active_warehouses.append({
             "id":                      wh.id,
             "slot_id":                 wh.slot_id,
@@ -382,52 +387,88 @@ def simulate_quarter(
             "max_capacity":            wh_cfg.get("capacity", 0),
             "vehicles":                wh_vehicles,
             "orders_handled":          0,
+            "x":                       wh_x,
+            "y":                       wh_y,
         })
 
-    total_urgent    = sum(z["urgent_orders"]    for z in demand_zones)
-    total_nonurgent = sum(z["nonurgent_orders"] for z in demand_zones)
+    total_urgent    = sum(z.get("urgent_orders", 0)    for z in demand_zones)
+    total_nonurgent = sum(z.get("nonurgent_orders", 0) for z in demand_zones)
     total_demand    = total_urgent + total_nonurgent
 
     fulfilled_urgent    = 0
     fulfilled_nonurgent = 0
-    remaining_urgent    = total_urgent
-    remaining_nonurgent = total_nonurgent
 
-    # Phase 1: Dedicated-urgent vehicles serve urgent first
+    # 1. Assign each demand zone to its nearest active warehouse (within service radius)
+    wh_assigned_demand = {
+        wh["id"]: {"urgent": [], "nonurgent": []}
+        for wh in active_warehouses
+    }
+
+    for z in demand_zones:
+        # If coordinates are missing, fall back to assigning to the first active warehouse
+        if "x" not in z or "y" not in z:
+            if active_warehouses:
+                first_wh = active_warehouses[0]
+                if z.get("urgent_orders", 0) > 0:
+                    wh_assigned_demand[first_wh["id"]]["urgent"].append(z)
+                if z.get("nonurgent_orders", 0) > 0:
+                    wh_assigned_demand[first_wh["id"]]["nonurgent"].append(z)
+            continue
+
+        nearest_wh = None
+        min_dist = float("inf")
+        for wh in active_warehouses:
+            dist = math.sqrt((wh["x"] - z["x"])**2 + (wh["y"] - z["y"])**2)
+            if dist < min_dist:
+                min_dist = dist
+                nearest_wh = wh
+
+        if nearest_wh and min_dist <= service_radius:
+            if z.get("urgent_orders", 0) > 0:
+                wh_assigned_demand[nearest_wh["id"]]["urgent"].append(z)
+            if z.get("nonurgent_orders", 0) > 0:
+                wh_assigned_demand[nearest_wh["id"]]["nonurgent"].append(z)
+
+    # 2. Simulate fulfillment per warehouse
     for wh in active_warehouses:
+        wh_demand = wh_assigned_demand[wh["id"]]
+        
+        # Calculate local remaining demand
+        wh_remaining_urgent    = sum(z.get("urgent_orders", 0) for z in wh_demand["urgent"])
+        wh_remaining_nonurgent = sum(z.get("nonurgent_orders", 0) for z in wh_demand["nonurgent"])
+        
+        # Phase 1: Dedicated-urgent vehicles serve local urgent first
         for v in wh["vehicles"]:
             if v["serves_urgent"] and not v["serves_nonurgent"]:
-                can_u = min(v["capacity"] - v["used"], remaining_urgent)
+                can_u = min(v["capacity"] - v["used"], wh_remaining_urgent)
                 v["used"]            += can_u
-                remaining_urgent     -= can_u
+                wh_remaining_urgent  -= can_u
                 wh["orders_handled"] += can_u
                 fulfilled_urgent     += can_u
 
-    # Phase 2: Dedicated-nonurgent vehicles serve nonurgent
-    for wh in active_warehouses:
+        # Phase 2: Dedicated-nonurgent vehicles serve local nonurgent
         for v in wh["vehicles"]:
             if not v["serves_urgent"] and v["serves_nonurgent"]:
-                can_n = min(v["capacity"] - v["used"], remaining_nonurgent)
+                can_n = min(v["capacity"] - v["used"], wh_remaining_nonurgent)
                 v["used"]            += can_n
-                remaining_nonurgent  -= can_n
+                wh_remaining_nonurgent -= can_n
                 wh["orders_handled"] += can_n
                 fulfilled_nonurgent  += can_n
 
-    # Phase 3: Flexible (both) vehicles serve urgent first, then nonurgent
-    for wh in active_warehouses:
+        # Phase 3: Flexible (both) vehicles serve local urgent first, then nonurgent
         for v in wh["vehicles"]:
             if v["serves_urgent"] and v["serves_nonurgent"]:
                 # first urgent
-                can_fu = min(v["capacity"] - v["used"], remaining_urgent)
+                can_fu = min(v["capacity"] - v["used"], wh_remaining_urgent)
                 v["used"]            += can_fu
-                remaining_urgent     -= can_fu
+                wh_remaining_urgent  -= can_fu
                 wh["orders_handled"] += can_fu
                 fulfilled_urgent     += can_fu
                 
                 # then nonurgent
-                can_fn = min(v["capacity"] - v["used"], remaining_nonurgent)
+                can_fn = min(v["capacity"] - v["used"], wh_remaining_nonurgent)
                 v["used"]            += can_fn
-                remaining_nonurgent  -= can_fn
+                wh_remaining_nonurgent -= can_fn
                 wh["orders_handled"] += can_fn
                 fulfilled_nonurgent  += can_fn
 
@@ -468,14 +509,13 @@ def simulate_quarter(
     urgent_stockouts    = total_urgent - fulfilled_urgent
     nonurgent_stockouts = total_nonurgent - fulfilled_nonurgent
 
-    # Per-warehouse-type utilization: orders_handled / total vehicle capacity for that type
+    # Per-warehouse-type utilization: orders_handled / total physical capacity for that type
     wh_type_orders    = {}  # {type: total_orders_handled}
-    wh_type_capacity  = {}  # {type: total_vehicle_capacity}
+    wh_type_capacity  = {}  # {type: total_warehouse_physical_capacity}
     for wh in active_warehouses:
         wt = wh["warehouse_type"]
-        wh_cap = sum(v["capacity"] for v in wh["vehicles"])
         wh_type_orders[wt]   = wh_type_orders.get(wt, 0) + wh["orders_handled"]
-        wh_type_capacity[wt] = wh_type_capacity.get(wt, 0) + wh_cap
+        wh_type_capacity[wt] = wh_type_capacity.get(wt, 0) + wh["max_capacity"]
 
     warehouse_type_utilization = {}
     for wt in ("small", "medium", "large"):

@@ -1752,11 +1752,20 @@ function localSim() {
   (state.urgentSpots||[]).forEach(function(z){ totU+=z.orders; });
   (state.nonurgentSpots||[]).forEach(function(z){ totN+=z.orders; });
 
-  var vehicles = [];
   var droneCap = 0, droneUsed = 0;
   var truckCap = 0, truckUsed = 0;
+  var totalCap = 0;
+
+  // Build active warehouses representation with positions
+  var activeWhs = [];
+  var whTypeOrders = {small: 0, medium: 0, large: 0};
+  var whTypeCapacity = {small: 0, medium: 0, large: 0};
 
   state.placedWarehouses.filter(function(w){return w.isActive&&!w.isSold;}).forEach(function(wh){
+    var slot = state.scenario.warehouse_slots.filter(function(s){ return s.id === wh.slotId; })[0];
+    if (!slot) return;
+
+    var whVehicles = [];
     wh.vehicles.filter(function(v){return !v.is_sold;}).forEach(function(v){
       var vc=sc.vehicle_config[v.type];
       var entry = {
@@ -1766,61 +1775,118 @@ function localSim() {
         serves_nonurgent: !!vc.serves_nonurgent,
         used: 0
       };
-      vehicles.push(entry);
+      whVehicles.push(entry);
       opCost += vc.operating_cost || 0;
       if (v.type === "drone") droneCap += entry.capacity;
       if (v.type === "truck") truckCap += entry.capacity;
     });
+
+    var whCfg = sc.warehouse_config[wh.warehouseType] || {};
+    var maxCap = whCfg.capacity || 0;
+    whTypeCapacity[wh.warehouseType] += maxCap;
+
+    activeWhs.push({
+      id: wh.id,
+      slotId: wh.slotId,
+      warehouseType: wh.warehouseType,
+      x: slot.x,
+      y: slot.y,
+      maxCapacity: maxCap,
+      vehicles: whVehicles,
+      ordersHandled: 0
+    });
   });
 
-  var remU = totU, remN = totN;
+  totalCap = droneCap + truckCap;
+
+  // Assign demand zones to nearest active warehouse within MAX_ROUTE_DISTANCE
+  var whAssignedDemand = {};
+  activeWhs.forEach(function(wh) {
+    whAssignedDemand[wh.id] = {urgent: [], nonurgent: []};
+  });
+
+  var allSpots = (state.urgentSpots||[]).concat(state.nonurgentSpots||[]);
+  allSpots.forEach(function(z) {
+    var near=null, minD=Infinity;
+    activeWhs.forEach(function(wh){
+      var d=Math.sqrt(Math.pow(wh.x-z.x,2)+Math.pow(wh.y-z.y,2));
+      if(d<minD){minD=d;near=wh;}
+    });
+    if (near && minD<=MAX_ROUTE_DISTANCE) {
+      if (z.type === "urgent") {
+        whAssignedDemand[near.id].urgent.push(z);
+      } else {
+        whAssignedDemand[near.id].nonurgent.push(z);
+      }
+    }
+  });
+
   var fu = 0, fn = 0;
 
-  // Phase 1: Dedicated urgent
-  vehicles.forEach(function(v){
-    if (v.serves_urgent && !v.serves_nonurgent) {
-      var can = Math.min(v.capacity - v.used, remU);
-      v.used += can;
-      remU -= can;
-      fu += can;
-    }
+  // Simulate per warehouse
+  activeWhs.forEach(function(wh) {
+    var assigned = whAssignedDemand[wh.id];
+    var remU = assigned.urgent.reduce(function(s,z){ return s+z.orders; }, 0);
+    var remN = assigned.nonurgent.reduce(function(s,z){ return s+z.orders; }, 0);
+
+    // Phase 1: Dedicated urgent
+    wh.vehicles.forEach(function(v){
+      if (v.serves_urgent && !v.serves_nonurgent) {
+        var can = Math.min(v.capacity - v.used, remU);
+        v.used += can;
+        remU -= can;
+        fu += can;
+        wh.ordersHandled += can;
+      }
+    });
+
+    // Phase 2: Dedicated nonurgent
+    wh.vehicles.forEach(function(v){
+      if (!v.serves_urgent && v.serves_nonurgent) {
+        var can = Math.min(v.capacity - v.used, remN);
+        v.used += can;
+        remN -= can;
+        fn += can;
+        wh.ordersHandled += can;
+      }
+    });
+
+    // Phase 3: Flexible (both)
+    wh.vehicles.forEach(function(v){
+      if (v.serves_urgent && v.serves_nonurgent) {
+        var canU = Math.min(v.capacity - v.used, remU);
+        v.used += canU;
+        remU -= canU;
+        fu += canU;
+        wh.ordersHandled += canU;
+
+        var canN = Math.min(v.capacity - v.used, remN);
+        v.used += canN;
+        remN -= canN;
+        fn += canN;
+        wh.ordersHandled += canN;
+      }
+    });
+
+    wh.vehicles.forEach(function(v){
+      if (v.type === "drone") droneUsed += v.used;
+      if (v.type === "truck") truckUsed += v.used;
+    });
+
+    whTypeOrders[wh.warehouseType] += wh.ordersHandled;
   });
 
-  // Phase 2: Dedicated nonurgent
-  vehicles.forEach(function(v){
-    if (!v.serves_urgent && v.serves_nonurgent) {
-      var can = Math.min(v.capacity - v.used, remN);
-      v.used += can;
-      remN -= can;
-      fn += can;
-    }
-  });
-
-  // Phase 3: Flexible (both)
-  vehicles.forEach(function(v){
-    if (v.serves_urgent && v.serves_nonurgent) {
-      var canU = Math.min(v.capacity - v.used, remU);
-      v.used += canU;
-      remU -= canU;
-      fu += canU;
-
-      var canN = Math.min(v.capacity - v.used, remN);
-      v.used += canN;
-      remN -= canN;
-      fn += canN;
-    }
-  });
-
-  vehicles.forEach(function(v){
-    if (v.type === "drone") droneUsed += v.used;
-    if (v.type === "truck") truckUsed += v.used;
+  var warehouseTypeUtilization = {};
+  ["small", "medium", "large"].forEach(function(wt) {
+    var cap = whTypeCapacity[wt];
+    var ordH = whTypeOrders[wt];
+    warehouseTypeUtilization[wt] = cap > 0 ? Math.round((Math.min(ordH / cap, 1)) * 10000) / 10000 : null;
   });
 
   var rev = fu * sc.urgent_order_revenue + fn * sc.nonurgent_order_revenue;
   var profit = rev - opCost;
   var total = totU + totN;
   var fulfilled = fu + fn;
-  var totalCap = droneCap + truckCap;
   var nextQ = ranQuarter + 1;
   var pendingCost = computePendingVehicleNetCost(state.demoPendingDeltas||{}, sc.vehicle_config);
 
@@ -1847,7 +1913,8 @@ function localSim() {
     drone_utilization: droneCap > 0 ? droneUsed / droneCap : 0,
     truck_utilization: truckCap > 0 ? truckUsed / truckCap : 0,
     urgent_stockouts: totU - fu,
-    nonurgent_stockouts: totN - fn
+    nonurgent_stockouts: totN - fn,
+    warehouse_type_utilization: warehouseTypeUtilization
   };
 }
 
