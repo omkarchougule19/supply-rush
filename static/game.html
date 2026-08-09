@@ -943,15 +943,17 @@ function renderDemandSpots() {
   (state.urgentSpots||[]).forEach(function(z){ activeZoneIds[z.zone_id]=true; });
   (state.nonurgentSpots||[]).forEach(function(z){ activeZoneIds[z.zone_id]=true; });
 
-  (state.revealedZones||[]).forEach(function(z) {
-    if (activeZoneIds[z.id]) return; // an active demand dot will cover this zone instead
-    var el = document.createElement("div");
-    el.className = "demand-spot revealed";
-    el.style.left = z.x+"%";
-    el.style.top  = z.y+"%";
-    el.title = "Zone "+z.id+" — no active demand this quarter";
-    mc.appendChild(el);
-  });
+  if (state.currentQuarter === 0) {
+    (state.revealedZones||[]).forEach(function(z) {
+      if (activeZoneIds[z.id]) return; // an active demand dot will cover this zone instead
+      var el = document.createElement("div");
+      el.className = "demand-spot revealed";
+      el.style.left = z.x+"%";
+      el.style.top  = z.y+"%";
+      el.title = "Zone "+z.id+" — no active demand this quarter";
+      mc.appendChild(el);
+    });
+  }
 
   function addLabel(z, text) {
     var lbl = document.createElement("div");

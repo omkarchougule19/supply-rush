@@ -144,8 +144,7 @@ def generate_demand(
 ) -> Dict:
     """
     Generate demand for the quarter, scaling the target number of active zones
-    linearly from 50% in Quarter 1 to 100% in the final quarter (eliminating
-    all golden circles by game completion).
+    linearly from 50% in Quarter 1 to 100% in the second-to-last quarter.
     """
     if seed is not None:
         random.seed(seed)
@@ -153,15 +152,14 @@ def generate_demand(
     pool = demand_zone_positions[:]
     by_id = {z["id"]: z for z in pool}
 
-    # Calculate active ratio: starts at 50% in Q1 and increases linearly to 100% by 75% progress (Q12)
-    total_q = max(1, total_quarters)
-    current_q = max(1, min(quarter, total_q))
-    progress = current_q / total_q
-    
-    if progress >= 0.75:
+    # Calculate active ratio: exactly 50% in Q1 to 100% in the second-to-last quarter
+    if total_quarters <= 2:
         active_ratio = 1.0
     else:
-        active_ratio = 0.5 + 0.5 * (progress / 0.75)
+        if quarter >= total_quarters - 1:
+            active_ratio = 1.0
+        else:
+            active_ratio = 0.5 + 0.5 * (quarter - 1) / (total_quarters - 2)
 
     target_active_count = max(2, int(len(pool) * active_ratio))
     target_active_count = min(target_active_count, len(pool))
@@ -170,6 +168,32 @@ def generate_demand(
     urgent_active    = [z for z in activated_urgent    if z["id"] in by_id]
     nonurgent_active = [z for z in activated_nonurgent if z["id"] in by_id]
     already_active_ids = {z["id"] for z in urgent_active} | {z["id"] for z in nonurgent_active}
+
+    # Evolve the demand for already active zones
+    def evolve_zone(z):
+        prev_orders = z.get("orders")
+        if prev_orders is None:
+            prev_orders = random.randint(demand_min, demand_max)
+        
+        # 15% probability of a 50-80% drop (approx once in 5-8 quarters)
+        if random.random() < 0.15:
+            drop_pct = random.uniform(0.5, 0.8)
+            new_orders = prev_orders * (1 - drop_pct)
+        else:
+            # 5-20% growth
+            growth_pct = random.uniform(0.05, 0.20)
+            new_orders = prev_orders * (1 + growth_pct)
+            
+        final_orders = max(10, min(int(round(new_orders)), demand_max))
+        return {
+            "id":     z["id"],
+            "x":      z["x"],
+            "y":      z["y"],
+            "orders": final_orders
+        }
+
+    urgent_active = [evolve_zone(z) for z in urgent_active]
+    nonurgent_active = [evolve_zone(z) for z in nonurgent_active]
 
     new_spots_needed = max(0, target_active_count - len(already_active_ids))
 
@@ -181,15 +205,16 @@ def generate_demand(
         new_urgent_zones = new_zones[:new_urgent_count]
         new_nonurgent_zones = new_zones[new_urgent_count:]
 
-        def fix_position(zone):
+        def init_zone(zone):
             return {
-                "id": zone["id"],
-                "x":  zone["x"],
-                "y":  zone["y"],
+                "id":     zone["id"],
+                "x":      zone["x"],
+                "y":      zone["y"],
+                "orders": random.randint(demand_min, demand_max)
             }
 
-        urgent_active = urgent_active + [fix_position(z) for z in new_urgent_zones]
-        nonurgent_active = nonurgent_active + [fix_position(z) for z in new_nonurgent_zones]
+        urgent_active = urgent_active + [init_zone(z) for z in new_urgent_zones]
+        nonurgent_active = nonurgent_active + [init_zone(z) for z in new_nonurgent_zones]
 
     def make_spot(fixed_zone, spot_type):
         return {
@@ -197,7 +222,7 @@ def generate_demand(
             "x":       fixed_zone["x"],
             "y":       fixed_zone["y"],
             "type":    spot_type,
-            "orders":  random.randint(demand_min, demand_max),
+            "orders":  fixed_zone["orders"],
         }
 
     return {
