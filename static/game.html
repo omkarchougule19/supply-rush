@@ -241,8 +241,12 @@
     .demand-label { position:absolute; transform:translate(-50%,-50%); font-size:10px; font-weight:700; color:#fff; background:rgba(7,13,24,.82); border:1px solid rgba(255,255,255,.15); border-radius:6px; padding:1px 5px; white-space:nowrap; pointer-events:none; z-index:15; font-variant-numeric:tabular-nums; }
     .warehouse-label { position:absolute; transform:translate(-50%,-50%); font-size:10px; font-weight:700; background:rgba(7,13,24,.88); border:1px solid rgba(255,255,255,.18); border-radius:6px; padding:2px 7px; white-space:nowrap; pointer-events:none; z-index:16; font-variant-numeric:tabular-nums; }
     .demand-spot.revealed { width:16px; height:16px; background:rgba(255,210,74,.16); border:2px dashed rgba(255,210,74,.95); cursor:default; box-shadow:0 0 8px rgba(255,210,74,.5); }
+    .demand-spot.urgent.outsourced { background:#10b981 !important; animation:pulse-green 1.6s ease-out infinite !important; }
+    .demand-spot.nonurgent.outsourced { background:#10b981 !important; animation:pulse-green 2s ease-out infinite !important; }
+    .demand-spot.revealed.outsourced { background:rgba(16,185,129,.16) !important; border:2px dashed #10b981 !important; box-shadow:0 0 8px rgba(16,185,129,.5) !important; }
     @keyframes pulse-red  { 0%{box-shadow:0 0 0 0 rgba(248,113,113,.65)} 70%{box-shadow:0 0 0 9px rgba(248,113,113,0)} 100%{box-shadow:0 0 0 0 rgba(248,113,113,0)} }
     @keyframes pulse-blue { 0%{box-shadow:0 0 0 0 rgba(96,200,255,.55)}  70%{box-shadow:0 0 0 8px rgba(96,200,255,0)}  100%{box-shadow:0 0 0 0 rgba(96,200,255,0)} }
+    @keyframes pulse-green { 0%{box-shadow:0 0 0 0 rgba(16,185,129,.65)} 70%{box-shadow:0 0 0 9px rgba(16,185,129,0)} 100%{box-shadow:0 0 0 0 rgba(16,185,129,0)} }
 
     /* WAREHOUSE PANEL */
     #wh-panel { position:fixed; top:58px; right:0; bottom:0; width:min(300px, 100vw); background:var(--surface); border-left:1px solid var(--border); z-index:50; transform:translateX(100%); transition:transform .25s ease; display:flex; flex-direction:column; overflow-y:auto; }
@@ -658,6 +662,7 @@ function exitToHome(discard) {
     : "Exit to home? Your current quarter progress will be lost.";
   showConfirm(title, msg, function() {
     closePause();
+    state.exiting = true;
     // Reset state
     state.playId = null; state.completed = false;
     state.quarterlyResults = []; state.placedWarehouses = [];
@@ -667,6 +672,7 @@ function exitToHome(discard) {
     document.getElementById("game-ui").className = "";
     document.getElementById("entry-screen").style.display = "flex";
     document.getElementById("entry-error").textContent = "";
+    setTimeout(function() { state.exiting = false; }, 150);
   });
 }
 
@@ -679,6 +685,7 @@ function pushPlayingHash() {
 
 // Intercept browser back button while in-game
 window.addEventListener("popstate", function(e) {
+  if (state.exiting) return;
   var inGame = document.getElementById("game-ui").className === "visible";
   if (inGame) {
     // Push the hash back so back button works again next time
@@ -734,6 +741,7 @@ function initGame(data) {
   state.cash           = (data.cash !== undefined && data.cash !== null) ? data.cash : state.scenario.starting_budget;
   state.completed      = data.completed||false;
   state.quarterlyResults = data.quarterly_results||[];
+  state.outsourcedZones  = data.outsourced_zones||[];
   state.warehouseSlots   = (state.scenario.warehouse_slots && state.scenario.warehouse_slots.length) ? state.scenario.warehouse_slots : WH_SLOTS;
   state.placedWarehouses = [];
   state.urgentSpots      = [];
@@ -943,14 +951,17 @@ function renderDemandSpots() {
   (state.urgentSpots||[]).forEach(function(z){ activeZoneIds[z.zone_id]=true; });
   (state.nonurgentSpots||[]).forEach(function(z){ activeZoneIds[z.zone_id]=true; });
 
-  if (state.currentQuarter === 0) {
+  if (state.currentQuarter === 0 || (state.scenario && state.scenario.allow_outsourcing)) {
     (state.revealedZones||[]).forEach(function(z) {
       if (activeZoneIds[z.id]) return; // an active demand dot will cover this zone instead
+      var isOutsourced = (state.outsourcedZones||[]).indexOf(z.id) !== -1;
       var el = document.createElement("div");
-      el.className = "demand-spot revealed";
+      el.className = "demand-spot revealed" + (isOutsourced ? " outsourced" : "");
       el.style.left = z.x+"%";
       el.style.top  = z.y+"%";
-      el.title = "Zone "+z.id+" — no active demand this quarter";
+      el.style.cursor = "pointer";
+      el.onclick = function(){ openZonePanel(z.id); };
+      el.title = "Zone "+z.id + (isOutsourced ? " (Outsourced)" : " — no active demand this quarter");
       mc.appendChild(el);
     });
   }
@@ -962,27 +973,33 @@ function renderDemandSpots() {
     lbl.style.left = z.x+"%";
     lbl.style.top  = (z.y-3.2)+"%"; // sits just above the dot
     lbl.textContent = text;
+    lbl.style.cursor = "pointer";
+    lbl.onclick = function(){ openZonePanel(z.zone_id); };
     mc.appendChild(lbl);
   }
 
   (state.urgentSpots||[]).forEach(function(z) {
+    var isOutsourced = (state.outsourcedZones||[]).indexOf(z.zone_id) !== -1;
     var el = document.createElement("div");
-    el.className = "demand-spot urgent";
-    el.dataset.zoneId = z.zone_id;
+    el.className = "demand-spot urgent" + (isOutsourced ? " outsourced" : "");
     el.style.left = z.x+"%";
     el.style.top  = z.y+"%";
-    el.title = "Urgent: "+z.orders+" orders";
+    el.style.cursor = "pointer";
+    el.onclick = function(){ openZonePanel(z.zone_id); };
+    el.title = "Urgent: "+z.orders+" orders" + (isOutsourced ? " (Outsourced)" : "");
     mc.appendChild(el);
     addLabel(z, z.orders.toLocaleString());
   });
 
   (state.nonurgentSpots||[]).forEach(function(z) {
+    var isOutsourced = (state.outsourcedZones||[]).indexOf(z.zone_id) !== -1;
     var el = document.createElement("div");
-    el.className = "demand-spot nonurgent";
-    el.dataset.zoneId = z.zone_id;
+    el.className = "demand-spot nonurgent" + (isOutsourced ? " outsourced" : "");
     el.style.left = z.x+"%";
     el.style.top  = z.y+"%";
-    el.title = "Non-urgent: "+z.orders+" orders";
+    el.style.cursor = "pointer";
+    el.onclick = function(){ openZonePanel(z.zone_id); };
+    el.title = "Non-urgent: "+z.orders+" orders" + (isOutsourced ? " (Outsourced)" : "");
     mc.appendChild(el);
     addLabel(z, z.orders.toLocaleString());
   });
@@ -1005,6 +1022,8 @@ function computeZoneAssignments() {
   var allSpots = (state.urgentSpots||[]).concat(state.nonurgentSpots||[]);
   var pairs = [];
   allSpots.forEach(function(z) {
+    var isOutsourced = (state.outsourcedZones || []).indexOf(z.zone_id) !== -1;
+    if (isOutsourced) return;
     var near=null, minD=Infinity;
     active.forEach(function(s){
       var d=Math.sqrt(Math.pow(s.x-z.x,2)+Math.pow(s.y-z.y,2));
@@ -1267,6 +1286,98 @@ function fakeDemand() {
   renderRoutes();
 }
 
+/* ── ZONE PANEL (Outsourcing) ── */
+function openZonePanel(zoneId) {
+  clearPanelError();
+  var zone = null;
+  if (state.revealedZones) {
+    zone = state.revealedZones.filter(function(z){ return z.id === zoneId; })[0];
+  }
+  if (!zone && state.urgentSpots) {
+    var uz = state.urgentSpots.filter(function(z){ return z.zone_id === zoneId; })[0];
+    if (uz) zone = {id: zoneId, x: uz.x, y: uz.y};
+  }
+  if (!zone && state.nonurgentSpots) {
+    var nz = state.nonurgentSpots.filter(function(z){ return z.zone_id === zoneId; })[0];
+    if (nz) zone = {id: zoneId, x: nz.x, y: nz.y};
+  }
+  if (!zone) return;
+
+  var urgentOrders = 0;
+  if (state.urgentSpots) {
+    var uz = state.urgentSpots.filter(function(z){ return z.zone_id === zoneId; })[0];
+    if (uz) urgentOrders = uz.orders;
+  }
+  var nonurgentOrders = 0;
+  if (state.nonurgentSpots) {
+    var nz = state.nonurgentSpots.filter(function(z){ return z.zone_id === zoneId; })[0];
+    if (nz) nonurgentOrders = nz.orders;
+  }
+
+  var isOutsourced = (state.outsourcedZones || []).indexOf(zoneId) !== -1;
+  var allowOutsource = state.scenario && state.scenario.allow_outsourcing;
+
+  var html = '<div class="wh-panel-section">Forecasted Demand</div>'
+    +'<div class="wh-fulfill-card" style="margin-bottom:20px">'
+    +'<div style="font-size:13px;margin-bottom:6px">Urgent: <span style="font-weight:700;color:var(--red)">'+fmt(urgentOrders)+'</span> orders</div>'
+    +'<div style="font-size:13px">Non-urgent: <span style="font-weight:700;color:var(--blue)">'+fmt(nonurgentOrders)+'</span> orders</div>'
+    +'</div>';
+
+  if (allowOutsource) {
+    var uCost = state.scenario.outsource_cost_urgent || 75;
+    var nuCost = state.scenario.outsource_cost_nonurgent || 40;
+    
+    html += '<div class="wh-panel-section">Outsourcing Rules (3PL)</div>'
+      +'<div style="font-size:12px;color:var(--muted);margin-bottom:12px">'
+      +'Outsource cost: <strong>$'+fmt(uCost)+'</strong> per urgent order and <strong>$'+fmt(nuCost)+'</strong> per non-urgent order.'
+      +'<br/>Outsourced orders are 100% fulfilled instantly.'
+      +'</div>'
+      +'<div style="display:flex;align-items:center;justify-content:between;gap:12px;background:var(--card);border:1px solid var(--border);padding:12px;border-radius:8px">'
+      +'<div style="font-size:13px;font-weight:600">Outsource deliveries in this zone</div>'
+      +'<div class="toggle '+(isOutsourced?'on':'')+'" style="margin-left:auto;cursor:pointer" onclick="toggleOutsourceZone(\''+zoneId+'\', this)"></div>'
+      +'</div>';
+  } else {
+    html += '<div class="wh-panel-section">Outsourcing Rules (3PL)</div>'
+      +'<div style="font-size:12px;color:var(--muted)">'
+      +'Outsourcing is disabled in this scenario.'
+      +'</div>';
+  }
+
+  document.getElementById("wh-panel-title").textContent = "Demand Zone " + zoneId;
+  document.getElementById("wh-panel-body").innerHTML = html;
+  document.getElementById("wh-panel").classList.add("open");
+}
+
+function toggleOutsourceZone(zoneId, el) {
+  var outsourced = !el.classList.contains("on");
+  
+  if (state.playId === DEMO_ID) {
+    state.outsourcedZones = state.outsourcedZones || [];
+    var idx = state.outsourcedZones.indexOf(zoneId);
+    if (outsourced) {
+      if (idx === -1) state.outsourcedZones.push(zoneId);
+    } else {
+      if (idx !== -1) state.outsourcedZones.splice(idx, 1);
+    }
+    el.classList.toggle("on");
+    renderDemandSpots(); renderRoutes();
+    return;
+  }
+  
+  fetch(API + "/sessions/" + state.playId + "/outsource", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ zone_id: zoneId, outsourced: outsourced })
+  }).then(function(r) { return r.ok ? r.json() : r.json().then(function(e){ throw e; }); })
+    .then(function(d) {
+      state.outsourcedZones = d.outsourced_zones;
+      el.classList.toggle("on");
+      renderDemandSpots(); renderRoutes();
+    })
+    .catch(function(e) { showPanelError((e && e.detail) || "Error updating outsource status."); });
+}
+
+
 /* ── BUY PANEL ── */
 function openBuyPanel(slot) {
   clearPanelError();
@@ -1275,7 +1386,7 @@ function openBuyPanel(slot) {
   var html = '<div class="wh-panel-section">Choose Warehouse Type</div>';
   Object.keys(wc).forEach(function(type) {
     var cfg = wc[type];
-    var ok = state.cash >= cfg.purchase_cost;
+    var ok = (state.cash - (state.pendingVehicleNetCost || 0)) >= cfg.purchase_cost;
     html += '<div class="wh-type-card'+(ok?'':' cant-afford')+'" id="wc-'+type+'" onclick="pickType(\''+type+'\')">'
       +'<div class="wh-type-name">'+cap(type)+' Warehouse</div>'
       +'<div class="wh-type-stats">'
@@ -1297,7 +1408,8 @@ function pickType(type) {
   var card = document.getElementById("wc-"+type);
   if (card) card.classList.add("selected");
   var btn = document.getElementById("buy-btn");
-  if (state.cash >= cfg.purchase_cost) {
+  var netCash = state.cash - (state.pendingVehicleNetCost || 0);
+  if (netCash >= cfg.purchase_cost) {
     btn.disabled = false;
     btn.textContent = "Build "+cap(type)+" — $"+fmt(cfg.purchase_cost);
     btn.dataset.type = type;
@@ -1312,6 +1424,11 @@ function confirmBuy() {
   var type = btn.dataset.type;
   if (!type) return;
   var cfg = state.scenario.warehouse_config[type];
+  var netCash = state.cash - (state.pendingVehicleNetCost || 0);
+  if (netCash < cfg.purchase_cost) {
+    showPanelError("Not enough cash (pending vehicle transactions reduce available budget).");
+    return;
+  }
 
   function doPlace(data) {
     state.cash = data.cashLeft;
@@ -1425,13 +1542,21 @@ function openManagePanel(slot, placed) {
     // A warehouse can't hold more fleet capacity than its own rating —
     // cap purchases at that limit regardless of cash on hand.
     var canBuyCapacity = (usedCapacity + vc.capacity) <= capacityLimit;
-    var canSell = count > 0;
+    
+    // Check if selling this vehicle type is allowed in the scenario
+    var isSellAllowed = true;
+    if (state.scenario) {
+      if (type === "truck" && state.scenario.allow_sell_trucks === false) isSellAllowed = false;
+      if (type === "drone" && state.scenario.allow_sell_drones === false) isSellAllowed = false;
+    }
+    
+    var canSell = count > 0 && isSellAllowed;
     html += '<div class="vehicle-card"><div>'
       +'<div class="vehicle-name" style="display:flex;align-items:center;gap:6px">'+cap(type)+(type==="truck"?" 🚛":" "+droneIconSVG(15))+'</div>'
       +'<div class="vehicle-meta">'+vc.capacity+' orders/qtr · $'+fmt(vc.operating_cost)+'/qtr op · buy $'+fmt(vc.purchase_cost)+' / sell $'+fmt(vc.sell_back)+'</div>'
       +'</div>'
       +'<div class="stepper">'
-      +'<button class="stepper-btn minus" onclick="adjustVehicle('+placed.id+',\''+type+'\',\'sell\')" '+(canSell?'':'disabled')+' title="Sell one '+type+'">−</button>'
+      +'<button class="stepper-btn minus" onclick="adjustVehicle('+placed.id+',\''+type+'\',\'sell\')" '+(canSell?'':'disabled')+' title="'+(isSellAllowed?'Sell one '+type:'Selling '+type+'s is disabled')+'">−</button>'
       +'<span class="stepper-count">'+count+'</span>'
       +'<button class="stepper-btn plus" onclick="adjustVehicle('+placed.id+',\''+type+'\',\'buy\')" '+(canBuyCapacity?'':'disabled')+' title="'+(canBuyCapacity?'Buy one '+type:'Warehouse fleet capacity is full')+'">+</button>'
       +'</div>'
@@ -1460,7 +1585,9 @@ function openManagePanel(slot, placed) {
   }
   html += '</div>';
 
-  html += '<button class="wh-sell-btn" onclick="sellWarehouse('+placed.id+')">Sell Warehouse — $'+fmt(wCfg.sell_back)+'</button>';
+  var isSellWhAllowed = state.scenario ? (state.scenario.allow_sell_warehouses !== false) : true;
+  html += '<button class="wh-sell-btn" ' + (isSellWhAllowed ? '' : 'disabled style="opacity:0.45;cursor:not-allowed;"') + ' onclick="sellWarehouse('+placed.id+')">'
+    + (isSellWhAllowed ? 'Sell Warehouse — $' + fmt(wCfg.sell_back) : 'Selling warehouses is disabled') + '</button>';
 
   document.getElementById("wh-panel-title").textContent = cap(placed.warehouseType)+" Warehouse";
   document.getElementById("wh-panel-body").innerHTML = html;
@@ -1537,6 +1664,10 @@ function adjustVehicle(whId, type, action) {
     // sell — find last unsold vehicle of this type
     var counts0 = wh.vehicleCounts || {};
     if (!counts0[type] || counts0[type] < 1) return;
+    if (state.scenario) {
+      if (type === "truck" && state.scenario.allow_sell_trucks === false) return;
+      if (type === "drone" && state.scenario.allow_sell_drones === false) return;
+    }
     // (No confirm dialog — the +/- stepper is meant to feel instant and reversible-ish.)
 
     var targetVeh = null;
@@ -1582,6 +1713,7 @@ function sellWarehouse(whId, confirmState) {
   }
   var wh  = state.placedWarehouses.filter(function(w){return w.id===whId;})[0];
   if (!wh) return;
+  if (state.scenario && state.scenario.allow_sell_warehouses === false) return;
   var cfg = state.scenario.warehouse_config[wh.warehouseType];
 
   function doSell(cashLeft) {
@@ -1590,7 +1722,18 @@ function sellWarehouse(whId, confirmState) {
     closeWhPanel(); updateHUD(); renderSlots(); renderRoutes();
   }
 
-  if (state.playId===DEMO_ID) { doSell(state.cash+cfg.sell_back); return; }
+  if (state.playId===DEMO_ID) {
+    var refund = cfg.sell_back;
+    (wh.vehicles||[]).forEach(function(v){
+      if (!v.is_sold) {
+        var vc = state.scenario.vehicle_config[v.type];
+        if (vc) refund += vc.sell_back;
+        v.is_sold = true;
+      }
+    });
+    doSell(state.cash + refund);
+    return;
+  }
   fetch(API+"/sessions/"+state.playId+"/warehouses/sell",{
     method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({warehouse_id:whId})
@@ -1751,8 +1894,32 @@ function runQuarter() {
 function localSim() {
   var sc=state.scenario, opCost=0, totU=0, totN=0;
   var ranQuarter = state.currentQuarter > 0 ? state.currentQuarter : 1;
-  (state.urgentSpots||[]).forEach(function(z){ totU+=z.orders; });
-  (state.nonurgentSpots||[]).forEach(function(z){ totN+=z.orders; });
+
+  var outsourced = state.outsourcedZones || [];
+  var uCost = sc.outsource_cost_urgent || 75;
+  var nuCost = sc.outsource_cost_nonurgent || 40;
+  var outsourceExpenses = 0;
+  var outsourceUrgentRev = 0;
+  var outsourceNonurgentRev = 0;
+  var outsourceUrgentFulfilled = 0;
+  var outsourceNonurgentFulfilled = 0;
+
+  (state.urgentSpots||[]).forEach(function(z){
+    totU += z.orders;
+    if (outsourced.indexOf(z.zone_id) !== -1) {
+      outsourceUrgentRev += z.orders * sc.urgent_order_revenue;
+      outsourceExpenses += z.orders * uCost;
+      outsourceUrgentFulfilled += z.orders;
+    }
+  });
+  (state.nonurgentSpots||[]).forEach(function(z){
+    totN += z.orders;
+    if (outsourced.indexOf(z.zone_id) !== -1) {
+      outsourceNonurgentRev += z.orders * sc.nonurgent_order_revenue;
+      outsourceExpenses += z.orders * nuCost;
+      outsourceNonurgentFulfilled += z.orders;
+    }
+  });
 
   var droneCap = 0, droneUsed = 0;
   var truckCap = 0, truckUsed = 0;
@@ -1885,38 +2052,42 @@ function localSim() {
     warehouseTypeUtilization[wt] = cap > 0 ? Math.round((Math.min(ordH / cap, 1)) * 10000) / 10000 : null;
   });
 
-  var rev = fu * sc.urgent_order_revenue + fn * sc.nonurgent_order_revenue;
-  var profit = rev - opCost;
+  var outsourceRev = outsourceUrgentRev + outsourceNonurgentRev;
+  var rev = fu * sc.urgent_order_revenue + fn * sc.nonurgent_order_revenue + outsourceRev;
+  var combinedOpCost = opCost + outsourceExpenses;
+  var profit = rev - combinedOpCost;
   var total = totU + totN;
-  var fulfilled = fu + fn;
+  var fulfilled = fu + fn + outsourceUrgentFulfilled + outsourceNonurgentFulfilled;
   var nextQ = ranQuarter + 1;
   var pendingCost = computePendingVehicleNetCost(state.demoPendingDeltas||{}, sc.vehicle_config);
 
   return {
     revenue: rev,
-    operating_cost: opCost,
+    operating_cost: combinedOpCost,
     profit: profit,
     cash_after: state.cash - pendingCost + profit,
     orders_fulfilled: fulfilled,
     orders_total: total,
-    urgent_fulfilled: fu,
+    urgent_fulfilled: fu + outsourceUrgentFulfilled,
     urgent_total: totU,
-    nonurgent_fulfilled: fn,
+    nonurgent_fulfilled: fn + outsourceNonurgentFulfilled,
     nonurgent_total: totN,
-    utilization_rate: totalCap > 0 ? Math.min(fulfilled / totalCap, 1) : 0,
+    utilization_rate: totalCap > 0 ? Math.min((fu + fn) / totalCap, 1) : 0,
     serving_pct: total > 0 ? Math.min(fulfilled / total, 1) : 0,
     stockouts: total - fulfilled,
     quarter: ranQuarter,
     completed: nextQ > state.totalQuarters,
     next_quarter: nextQ,
     // Breakdowns
-    urgent_revenue: fu * sc.urgent_order_revenue,
-    nonurgent_revenue: fn * sc.nonurgent_order_revenue,
+    urgent_revenue: fu * sc.urgent_order_revenue + outsourceUrgentRev,
+    nonurgent_revenue: fn * sc.nonurgent_order_revenue + outsourceNonurgentRev,
     drone_utilization: droneCap > 0 ? droneUsed / droneCap : 0,
     truck_utilization: truckCap > 0 ? truckUsed / truckCap : 0,
-    urgent_stockouts: totU - fu,
-    nonurgent_stockouts: totN - fn,
-    warehouse_type_utilization: warehouseTypeUtilization
+    urgent_stockouts: totU - (fu + outsourceUrgentFulfilled),
+    nonurgent_stockouts: totN - (fn + outsourceNonurgentFulfilled),
+    warehouse_type_utilization: warehouseTypeUtilization,
+    outsource_expenses: outsourceExpenses,
+    outsource_revenue: outsourceRev
   };
 }
 
@@ -1960,6 +2131,7 @@ function dismissResultsSidebar(callback) {
   var legend  = document.getElementById("legend-panel");
   sidebar.classList.remove("show");
   legend.style.display = "";
+  state.outsourcedZones = [];
   if (callback) callback();
 }
 
@@ -1990,9 +2162,18 @@ function showResults(q, r, newlyActivated) {
   var du = Math.round((r.drone_utilization||0)*100);
   var sp = Math.round(r.serving_pct*100);
 
+  var outsourceCard = "";
+  if ((r.outsource_expenses || 0) > 0 || (r.outsource_revenue || 0) > 0) {
+    outsourceCard = '<div class="r-card"><div class="r-label">3PL Outsource Cost</div>'
+      +'<div class="r-val-sm" style="color:var(--red)">$'+fmtK(r.outsource_expenses)+'</div></div>'
+      +'<div class="r-card"><div class="r-label">3PL Outsource Rev</div>'
+      +'<div class="r-val-sm" style="color:var(--green)">$'+fmtK(r.outsource_revenue)+'</div></div>';
+  }
+
   var cards =
     '<div class="r-card"><div class="r-label">Net P &amp; L</div>'
       +'<div class="r-val" style="color:'+pc+'">'+ps+'$'+fmtK(r.profit)+'</div></div>'
+    + outsourceCard
     +'<div class="r-card"><div class="r-label">Revenue — Urgent</div>'
       +'<div class="r-val-sm" style="color:var(--green)">$'+fmtK(r.urgent_revenue||0)+'</div></div>'
     +'<div class="r-card"><div class="r-label">Revenue — Non-Urgent</div>'

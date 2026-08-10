@@ -229,6 +229,50 @@
         </div>
       </div>
 
+      <!-- Rules & Restrictions -->
+      <div class="card">
+        <div class="card-title">Rules &amp; Restrictions</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Allow Selling Warehouses</label>
+            <div class="toggle-row">
+              <div class="toggle on" id="sc_allow_sell_wh" onclick="toggleEl(this)"></div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Allow Selling Trucks</label>
+            <div class="toggle-row">
+              <div class="toggle on" id="sc_allow_sell_trucks" onclick="toggleEl(this)"></div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Allow Selling Drones</label>
+            <div class="toggle-row">
+              <div class="toggle on" id="sc_allow_sell_drones" onclick="toggleEl(this)"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Outsourcing Rules -->
+      <div class="card">
+        <div class="card-title">Outsourcing Configurations (3PL)</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Enable Outsourcing Option</label>
+            <div class="toggle-row">
+              <div class="toggle" id="sc_allow_outsourcing" onclick="toggleEl(this)"></div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Outsource Cost - Urgent ($/order)</label>
+            <input type="number" id="sc_outsource_cost_urgent" value="75" min="1" max="1000"/>
+          </div>
+          <div class="form-group">
+            <label>Outsource Cost - Non-urgent ($/order)</label>
+            <input type="number" id="sc_outsource_cost_nonurgent" value="40" min="1" max="1000"/>
+          </div>
+        </div>
+      </div>
       <!-- Warehouses -->
       <div class="card">
         <div class="card-title">Warehouse Configuration <span class="pill pill-w">3 types</span></div>
@@ -440,6 +484,12 @@
         truck: { purchase_cost: +document.getElementById("v_truck_cost").value, operating_cost: +document.getElementById("v_truck_op").value, capacity: +document.getElementById("v_truck_cap").value, sell_back: +document.getElementById("v_truck_sell").value, serves_urgent: isOn("v_truck_urgent"), serves_nonurgent: isOn("v_truck_nonurgent") },
         drone: { purchase_cost: +document.getElementById("v_drone_cost").value, operating_cost: +document.getElementById("v_drone_op").value, capacity: +document.getElementById("v_drone_cap").value, sell_back: +document.getElementById("v_drone_sell").value, serves_urgent: isOn("v_drone_urgent"), serves_nonurgent: isOn("v_drone_nonurgent") },
       },
+      allow_sell_warehouses: isOn("sc_allow_sell_wh"),
+      allow_sell_trucks:     isOn("sc_allow_sell_trucks"),
+      allow_sell_drones:     isOn("sc_allow_sell_drones"),
+      allow_outsourcing:        isOn("sc_allow_outsourcing"),
+      outsource_cost_urgent:    +document.getElementById("sc_outsource_cost_urgent").value,
+      outsource_cost_nonurgent: +document.getElementById("sc_outsource_cost_nonurgent").value,
       warehouse_slots: [],
       demand_zone_positions: [],
     };
@@ -474,31 +524,68 @@
   // ── Scenario list ─────────────────────────────────────────────────────────
   async function renderScenarioList() {
     const el = document.getElementById("scenario-list-body");
-    if (savedScenarios.length === 0) {
-      el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:10px 0;">No scenarios yet. Create one first.</div>';
-      return;
+    el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:10px 0;">Loading scenarios…</div>';
+    try {
+      const res = await fetch(`${API}/scenarios`);
+      if (!res.ok) throw new Error(await res.text());
+      const scenarios = await res.json();
+      
+      if (scenarios.length === 0) {
+        el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:10px 0;">No scenarios yet. Create one first.</div>';
+        return;
+      }
+      
+      el.innerHTML = scenarios.map(sc => {
+        const createdDate = sc.created_at ? new Date(sc.created_at).toLocaleDateString("en-US", {month:"short", day:"numeric", year:"numeric"}) : "Unknown";
+        return `
+          <div class="scenario-row">
+            <div style="flex:1">
+              <div class="sc-name">${sc.name}</div>
+              <div class="sc-meta">${sc.total_quarters} quarters &nbsp;·&nbsp; $${sc.starting_budget.toLocaleString()} budget &nbsp;·&nbsp; Created ${createdDate}</div>
+            </div>
+            <div class="sc-code" style="margin: 0 24px">${sc.code}</div>
+            <div class="sc-actions">
+              <button class="btn btn-secondary sc-btn" onclick="copyText('${sc.code}')">📋 Copy Code</button>
+              <button class="btn btn-danger sc-btn" onclick="deleteScenario('${sc.code}')">✕ Delete</button>
+            </div>
+          </div>
+        `;
+      }).join("");
+    } catch(e) {
+      el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:10px 0;">Error loading scenarios. Falling back to local storage list.</div>';
+      console.error("[Supply Rush] Failed to load /scenarios:", e);
+      if (savedScenarios.length === 0) {
+        el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:10px 0;">No scenarios yet. Create one first.</div>';
+        return;
+      }
+      el.innerHTML = savedScenarios.map(sc => `
+        <div class="scenario-row">
+          <div style="flex:1">
+            <div class="sc-name">${sc.name}</div>
+            <div class="sc-meta">${sc.quarters || sc.total_quarters || 16} quarters &nbsp;·&nbsp; ${sc.budget || sc.starting_budget || "$3,000,000"} budget &nbsp;·&nbsp; Created ${sc.created || 'Unknown'}</div>
+          </div>
+          <div class="sc-code" style="margin: 0 24px">${sc.code}</div>
+          <div class="sc-actions">
+            <button class="btn btn-secondary sc-btn" onclick="copyText('${sc.code}')">📋 Copy Code</button>
+            <button class="btn btn-danger sc-btn" onclick="deleteScenario('${sc.code}', ${sc.id})">✕ Delete</button>
+          </div>
+        </div>
+      `).join("");
     }
-    el.innerHTML = savedScenarios.map(sc => `
-      <div class="scenario-row">
-        <div style="flex:1">
-          <div class="sc-name">${sc.name}</div>
-          <div class="sc-meta">${sc.quarters} quarters &nbsp;·&nbsp; ${sc.budget} budget &nbsp;·&nbsp; ${sc.students} students &nbsp;·&nbsp; Created ${sc.created}</div>
-        </div>
-        <div class="sc-code" style="margin: 0 24px">${sc.code}</div>
-        <div class="sc-actions">
-          <button class="btn btn-secondary sc-btn" onclick="copyText('${sc.code}')">📋 Copy Code</button>
-          <button class="btn btn-danger sc-btn" onclick="deleteScenario('${sc.code}', ${sc.id})">✕ Delete</button>
-        </div>
-      </div>
-    `).join("");
   }
 
-  async function deleteScenario(code, id) {
+  async function deleteScenario(code, fallbackId) {
     if (!confirm(`Delete scenario ${code}?`)) return;
     try {
       await fetch(`${API}/scenarios/${code}`, { method: "DELETE" });
-      savedScenarios = savedScenarios.filter(s => s.id !== id);
-      localStorage.setItem("sr_scenarios", JSON.stringify(savedScenarios));
+      if (fallbackId !== undefined) {
+        savedScenarios = savedScenarios.filter(s => s.id !== fallbackId);
+        localStorage.setItem("sr_scenarios", JSON.stringify(savedScenarios));
+      } else {
+        // Also remove from local cache by code if present
+        savedScenarios = savedScenarios.filter(s => s.code !== code);
+        localStorage.setItem("sr_scenarios", JSON.stringify(savedScenarios));
+      }
       renderScenarioList();
       showToast("Scenario deleted");
     } catch(e) { alert("Error: " + e.message); }
@@ -520,7 +607,7 @@
   let allPlays = [];
   let filteredPlays = [];
 
-  function fmt$(n) { return "$" + Math.abs(n).toLocaleString(); }
+  function fmt$(n) { return (n < 0 ? "−" : "") + "$" + Math.abs(n).toLocaleString(); }
   function fmtDate(s) {
     const d = new Date(s);
     return d.toLocaleDateString("en-US", {month:"short", day:"numeric"}) + " " +
@@ -628,6 +715,43 @@
     document.getElementById("sc_reveal_start").value = "6";
     document.getElementById("sc_service_radius").value = "30";
     document.getElementById("code-result").style.display = "none";
+
+    document.getElementById("wh_small_cost").value = "250000";
+    document.getElementById("wh_small_cap").value = "500";
+    document.getElementById("wh_small_build").value = "1";
+    document.getElementById("wh_small_sell").value = "125000";
+    
+    document.getElementById("wh_med_cost").value = "500000";
+    document.getElementById("wh_med_cap").value = "1200";
+    document.getElementById("wh_med_build").value = "2";
+    document.getElementById("wh_med_sell").value = "250000";
+    
+    document.getElementById("wh_large_cost").value = "800000";
+    document.getElementById("wh_large_cap").value = "2500";
+    document.getElementById("wh_large_build").value = "4";
+    document.getElementById("wh_large_sell").value = "400000";
+
+    document.getElementById("v_truck_cost").value = "20000";
+    document.getElementById("v_truck_op").value = "800";
+    document.getElementById("v_truck_cap").value = "200";
+    document.getElementById("v_truck_sell").value = "12000";
+    document.getElementById("v_truck_urgent").classList.remove("on");
+    document.getElementById("v_truck_nonurgent").classList.add("on");
+    
+    document.getElementById("v_drone_cost").value = "9000";
+    document.getElementById("v_drone_op").value = "800";
+    document.getElementById("v_drone_cap").value = "60";
+    document.getElementById("v_drone_sell").value = "5400";
+    document.getElementById("v_drone_urgent").classList.add("on");
+    document.getElementById("v_drone_nonurgent").classList.add("on");
+
+    document.getElementById("sc_allow_sell_wh").classList.add("on");
+    document.getElementById("sc_allow_sell_trucks").classList.add("on");
+    document.getElementById("sc_allow_sell_drones").classList.add("on");
+
+    document.getElementById("sc_allow_outsourcing").classList.remove("on");
+    document.getElementById("sc_outsource_cost_urgent").value = "75";
+    document.getElementById("sc_outsource_cost_nonurgent").value = "40";
   }
 </script>
 </body>

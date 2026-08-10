@@ -146,8 +146,7 @@ def generate_demand(
     Generate demand for the quarter, scaling the target number of active zones
     linearly from 50% in Quarter 1 to 100% in the second-to-last quarter.
     """
-    if seed is not None:
-        random.seed(seed)
+    r = random.Random(seed) if seed is not None else random
 
     pool = demand_zone_positions[:]
     by_id = {z["id"]: z for z in pool}
@@ -173,15 +172,15 @@ def generate_demand(
     def evolve_zone(z):
         prev_orders = z.get("orders")
         if prev_orders is None:
-            prev_orders = random.randint(demand_min, demand_max)
+            prev_orders = r.randint(demand_min, demand_max)
         
         # 15% probability of a 50-80% drop (approx once in 5-8 quarters)
-        if random.random() < 0.15:
-            drop_pct = random.uniform(0.5, 0.8)
+        if r.random() < 0.15:
+            drop_pct = r.uniform(0.5, 0.8)
             new_orders = prev_orders * (1 - drop_pct)
         else:
             # 5-20% growth
-            growth_pct = random.uniform(0.05, 0.20)
+            growth_pct = r.uniform(0.05, 0.20)
             new_orders = prev_orders * (1 + growth_pct)
             
         final_orders = max(10, min(int(round(new_orders)), demand_max))
@@ -199,7 +198,7 @@ def generate_demand(
 
     if new_spots_needed > 0:
         candidates = [z for z in pool if z["id"] not in already_active_ids]
-        new_zones = random.sample(candidates, min(new_spots_needed, len(candidates)))
+        new_zones = r.sample(candidates, min(new_spots_needed, len(candidates)))
         
         new_urgent_count = round(len(new_zones) * urgent_ratio)
         new_urgent_zones = new_zones[:new_urgent_count]
@@ -210,7 +209,7 @@ def generate_demand(
                 "id":     zone["id"],
                 "x":      zone["x"],
                 "y":      zone["y"],
-                "orders": random.randint(demand_min, demand_max)
+                "orders": r.randint(demand_min, demand_max)
             }
 
         urgent_active = urgent_active + [init_zone(z) for z in new_urgent_zones]

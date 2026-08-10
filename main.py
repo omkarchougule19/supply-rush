@@ -17,9 +17,10 @@ from routes import router
 # Create all DB tables on startup
 Base.metadata.create_all(bind=engine)
 
-# Self-healing migration for QuarterResult new columns in production DB (Postgres/SQLite)
+# Self-healing migrations for production DB (Postgres/SQLite)
 from sqlalchemy import text
 with engine.connect() as conn:
+    # 1. quarter_results table migrations
     columns_to_add = [
         ("urgent_revenue",      "FLOAT",   "0.0"),
         ("nonurgent_revenue",   "FLOAT",   "0.0"),
@@ -33,6 +34,9 @@ with engine.connect() as conn:
         ("large_utilization",   "FLOAT",   "NULL"),
         ("drone_cost",          "FLOAT",   "0.0"),
         ("truck_cost",          "FLOAT",   "0.0"),
+        # Outsourcing additions
+        ("outsource_expenses",  "FLOAT",   "0.0"),
+        ("outsource_revenue",   "FLOAT",   "0.0"),
     ]
     for col_name, col_type, default_val in columns_to_add:
         try:
@@ -40,6 +44,33 @@ with engine.connect() as conn:
             conn.commit()
         except Exception:
             conn.rollback()  # Reset aborted transaction state before next column (critical for PostgreSQL)
+
+    # 2. scenarios table migrations (sell restrictions & outsourcing)
+    scenario_columns = [
+        ("allow_sell_warehouses", "BOOLEAN", "1"),
+        ("allow_sell_trucks",     "BOOLEAN", "1"),
+        ("allow_sell_drones",     "BOOLEAN", "1"),
+        ("allow_outsourcing",     "BOOLEAN", "0"),
+        ("outsource_cost_urgent", "FLOAT",   "75.0"),
+        ("outsource_cost_nonurgent", "FLOAT", "40.0"),
+    ]
+    for col_name, col_type, default_val in scenario_columns:
+        try:
+            conn.execute(text(f"ALTER TABLE scenarios ADD COLUMN {col_name} {col_type} DEFAULT {default_val}"))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+
+    # 3. plays table migrations
+    plays_columns = [
+        ("outsourced_zones", "TEXT", "'[]'"),
+    ]
+    for col_name, col_type, default_val in plays_columns:
+        try:
+            conn.execute(text(f"ALTER TABLE plays ADD COLUMN {col_name} {col_type} DEFAULT {default_val}"))
+            conn.commit()
+        except Exception:
+            conn.rollback()
 
 app = FastAPI(
     title="Supply Rush API",

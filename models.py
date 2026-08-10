@@ -59,6 +59,16 @@ class Scenario(Base):
     # in the student game.
     warehouse_service_radius = Column(Integer, default=30)
 
+    # ── Sell permissions ──────────────────────────────────────────────────────
+    allow_sell_warehouses = Column(Boolean, default=True, nullable=False)
+    allow_sell_trucks     = Column(Boolean, default=True, nullable=False)
+    allow_sell_drones     = Column(Boolean, default=True, nullable=False)
+
+    # ── Outsourcing config ────────────────────────────────────────────────────
+    allow_outsourcing        = Column(Boolean, default=False, nullable=False)
+    outsource_cost_urgent    = Column(Float, default=75.0, nullable=False)
+    outsource_cost_nonurgent = Column(Float, default=40.0, nullable=False)
+
     # ── Map layout ────────────────────────────────────────────────────────────
     warehouse_slots       = Column(Text, default=json.dumps([]))  # [{id, x, y}, ...]
     demand_zone_positions = Column(Text, default=json.dumps([]))  # [{id, x, y}, ...]
@@ -111,6 +121,7 @@ class Play(Base):
     # quarter is run — no netting carries across quarter boundaries.
     # Format: {"truck": {"bought": N, "sold": M}, "drone": {...}}
     pending_vehicle_deltas = Column(Text, default=json.dumps({}))
+    outsourced_zones       = Column(Text, default=json.dumps([]))
 
     # Bundled quarterly results for fast reads — kept in sync with QuarterResult table
     # Format: [ { quarter, revenue, operating_cost, profit, cash_after,
@@ -163,6 +174,8 @@ class QuarterResult(Base):
     operating_cost      = Column(Float, default=0.0)
     profit              = Column(Float, default=0.0)
     cash_after          = Column(Float, default=0.0)
+    outsource_expenses  = Column(Float, default=0.0)
+    outsource_revenue   = Column(Float, default=0.0)
 
     # KPIs
     orders_fulfilled    = Column(Integer, default=0)

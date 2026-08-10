@@ -14,7 +14,7 @@ from schemas import (
     PlayCreate, NormalModeStart,
     PlaceWarehouseRequest, AddVehicleRequest,
     SellWarehouseRequest, SellVehicleRequest,
-    QuarterResultOut,
+    QuarterResultOut, OutsourceZoneRequest,
 )
 from game_logic import (
     generate_code, generate_play_id,
@@ -64,6 +64,7 @@ def _play_response(play: Play, sc: Scenario) -> dict:
         "pending_vehicle_net_cost": compute_pending_vehicle_net_cost(pending_deltas, v_cfg),
         "completed":       play.completed,
         "quarterly_results": json.loads(play.quarterly_results),
+        "outsourced_zones":  json.loads(play.outsourced_zones or "[]"),
         "scenario":        _parse_scenario(sc) if sc else None,
     }
 
@@ -100,6 +101,12 @@ def create_scenario(payload: ScenarioCreate, db: Session = Depends(get_db)):
         urgent_demand_ratio=payload.urgent_demand_ratio,
         demand_reveal_start_quarter=payload.demand_reveal_start_quarter,
         warehouse_service_radius=payload.warehouse_service_radius,
+        allow_sell_warehouses=payload.allow_sell_warehouses,
+        allow_sell_trucks=payload.allow_sell_trucks,
+        allow_sell_drones=payload.allow_sell_drones,
+        allow_outsourcing=payload.allow_outsourcing,
+        outsource_cost_urgent=payload.outsource_cost_urgent,
+        outsource_cost_nonurgent=payload.outsource_cost_nonurgent,
         warehouse_slots=json.dumps(wh_slots),
         demand_zone_positions=json.dumps(demand_zones),
     )
@@ -107,6 +114,13 @@ def create_scenario(payload: ScenarioCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(sc)
     return _parse_scenario(sc)
+
+
+@router.get("/scenarios", response_model=List[ScenarioOut], tags=["instructor"])
+def list_scenarios(db: Session = Depends(get_db)):
+    """Instructor view: list all saved scenarios."""
+    scenarios = db.query(Scenario).all()
+    return [_parse_scenario(sc) for sc in scenarios]
 
 
 @router.get("/scenarios/{code}", response_model=ScenarioOut, tags=["instructor"])
@@ -131,6 +145,9 @@ def update_scenario(code: str, payload: ScenarioUpdate, db: Session = Depends(ge
     if payload.urgent_demand_ratio     is not None: sc.urgent_demand_ratio     = payload.urgent_demand_ratio
     if payload.demand_reveal_start_quarter is not None: sc.demand_reveal_start_quarter = payload.demand_reveal_start_quarter
     if payload.warehouse_service_radius is not None: sc.warehouse_service_radius = payload.warehouse_service_radius
+    if payload.allow_sell_warehouses is not None: sc.allow_sell_warehouses = payload.allow_sell_warehouses
+    if payload.allow_sell_trucks     is not None: sc.allow_sell_trucks     = payload.allow_sell_trucks
+    if payload.allow_sell_drones     is not None: sc.allow_sell_drones     = payload.allow_sell_drones
     if payload.warehouse_slots is not None:
         wh_slots = [s.dict() for s in payload.warehouse_slots]
         if not wh_slots:
@@ -150,6 +167,12 @@ def update_scenario(code: str, payload: ScenarioUpdate, db: Session = Depends(ge
 @router.delete("/scenarios/{code}", tags=["instructor"])
 def delete_scenario(code: str, db: Session = Depends(get_db)):
     sc = _get_scenario_or_404(code, db)
+    plays = db.query(Play).filter(Play.scenario_id == sc.id).all()
+    play_ids = [p.id for p in plays]
+    if play_ids:
+        db.query(QuarterResult).filter(QuarterResult.play_id_fk.in_(play_ids)).delete(synchronize_session=False)
+        db.query(PlacedWarehouse).filter(PlacedWarehouse.play_id_fk.in_(play_ids)).delete(synchronize_session=False)
+        db.query(Play).filter(Play.id.in_(play_ids)).delete(synchronize_session=False)
     db.delete(sc)
     db.commit()
     return {"detail": f"Scenario '{code}' deleted"}
@@ -302,6 +325,31 @@ def get_play(play_id: str, db: Session = Depends(get_db)):
     return _play_response(play, play.scenario)
 
 
+@router.post("/sessions/{play_id}/outsource", tags=["student"])
+def toggle_outsource_zone(play_id: str, payload: OutsourceZoneRequest, db: Session = Depends(get_db)):
+    play = _get_play_or_404(play_id, db)
+    if play.completed:
+        raise HTTPException(400, "Game is already complete")
+    sc = play.scenario
+    if not getattr(sc, "allow_outsourcing", False):
+        raise HTTPException(400, "Outsourcing is disabled in this scenario")
+        
+    outsourced = json.loads(play.outsourced_zones or "[]")
+    if payload.outsourced:
+        if payload.zone_id not in outsourced:
+            outsourced.append(payload.zone_id)
+    else:
+        if payload.zone_id in outsourced:
+            outsourced.remove(payload.zone_id)
+            
+    play.outsourced_zones = json.dumps(outsourced)
+    db.commit()
+    return {
+        "outsourced_zones": outsourced,
+        "cash_remaining": play.cash,
+    }
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  STUDENT — Warehouse & vehicle actions
 # ─────────────────────────────────────────────────────────────────────────────
@@ -317,9 +365,17 @@ def place_warehouse(play_id: str, payload: PlaceWarehouseRequest, db: Session = 
     if not cfg:
         raise HTTPException(400, f"Unknown warehouse type: {payload.warehouse_type}")
 
+    v_cfg = json.loads(sc.vehicle_config)
+    deltas = json.loads(play.pending_vehicle_deltas or "{}")
+    pending_net_cost = compute_pending_vehicle_net_cost(deltas, v_cfg)
     cost = cfg["purchase_cost"]
-    if play.cash < cost:
-        raise HTTPException(400, f"Insufficient cash: need ${cost:,.0f}, have ${play.cash:,.0f}")
+    
+    if play.cash - pending_net_cost < cost:
+        raise HTTPException(
+            400,
+            f"Insufficient cash: need ${cost:,.0f} (plus ${pending_net_cost:,.0f} pending vehicle costs), "
+            f"have ${play.cash:,.0f}."
+        )
 
     existing = db.query(PlacedWarehouse).filter(
         PlacedWarehouse.play_id_fk == play.id,
@@ -431,8 +487,32 @@ def sell_warehouse(play_id: str, payload: SellWarehouseRequest, db: Session = De
         raise HTTPException(404, "Warehouse not found")
 
     sc = play.scenario
+    if not getattr(sc, "allow_sell_warehouses", True):
+        raise HTTPException(400, "Selling warehouses is disabled in this scenario")
+
     wh_cfg = json.loads(sc.warehouse_config)
     sell_price = wh_cfg[wh.warehouse_type]["sell_back"]
+    
+    # Auto-refund any active vehicles inside the sold warehouse
+    v_cfg = json.loads(sc.vehicle_config)
+    vehicles = json.loads(wh.vehicles)
+    deltas = json.loads(play.pending_vehicle_deltas or "{}")
+    for v in vehicles:
+        if not v.get("is_sold"):
+            vtype = v["type"]
+            if v.get("purchased_at") == play.current_quarter:
+                # Cancel current-quarter purchase
+                type_deltas = deltas.get(vtype, {"bought": 0, "sold": 0})
+                type_deltas["bought"] = max(0, type_deltas["bought"] - 1)
+                deltas[vtype] = type_deltas
+            else:
+                # Refund immediately (existing vehicle from prior quarters)
+                v_sell_price = v_cfg.get(vtype, {}).get("sell_back", 0)
+                sell_price += v_sell_price
+            v["is_sold"] = True
+    wh.vehicles = json.dumps(vehicles)
+    play.pending_vehicle_deltas = json.dumps(deltas)
+
     play.cash += sell_price
     wh.is_sold = True
     db.commit()
@@ -469,6 +549,10 @@ def sell_vehicle(play_id: str, payload: SellVehicleRequest, db: Session = Depend
     sc = play.scenario
     v_cfg = json.loads(sc.vehicle_config)
     vtype = target_vehicle["type"]
+    if vtype == "truck" and not getattr(sc, "allow_sell_trucks", True):
+        raise HTTPException(400, "Selling trucks is disabled in this scenario")
+    if vtype == "drone" and not getattr(sc, "allow_sell_drones", True):
+        raise HTTPException(400, "Selling drones is disabled in this scenario")
 
     deltas = json.loads(play.pending_vehicle_deltas or "{}")
     type_deltas = deltas.get(vtype, {"bought": 0, "sold": 0})
@@ -651,23 +735,48 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
     })
 
     # Flatten for simulation — urgent and nonurgent are separate spot lists, retaining position info
+    outsourced_zones = set(json.loads(play.outsourced_zones or "[]"))
+    outsource_expenses = 0.0
+    outsource_urgent_rev = 0.0
+    outsource_nonurgent_rev = 0.0
+    outsource_urgent_fulfilled = 0
+    outsource_nonurgent_fulfilled = 0
+    outsource_total = 0
+
     demand_flat = []
     for spot in demand["urgent"]:
-        demand_flat.append({
-            "zone_id":          spot["zone_id"],
-            "x":                spot["x"],
-            "y":                spot["y"],
-            "urgent_orders":    spot["orders"],
-            "nonurgent_orders": 0,
-        })
+        zid = spot["zone_id"]
+        orders = spot["orders"]
+        if zid in outsourced_zones:
+            outsource_urgent_rev += orders * sc.urgent_order_revenue
+            outsource_expenses += orders * getattr(sc, "outsource_cost_urgent", 75.0)
+            outsource_urgent_fulfilled += orders
+            outsource_total += orders
+        else:
+            demand_flat.append({
+                "zone_id":          zid,
+                "x":                spot["x"],
+                "y":                spot["y"],
+                "urgent_orders":    orders,
+                "nonurgent_orders": 0,
+            })
+
     for spot in demand["nonurgent"]:
-        demand_flat.append({
-            "zone_id":          spot["zone_id"],
-            "x":                spot["x"],
-            "y":                spot["y"],
-            "urgent_orders":    0,
-            "nonurgent_orders": spot["orders"],
-        })
+        zid = spot["zone_id"]
+        orders = spot["orders"]
+        if zid in outsourced_zones:
+            outsource_nonurgent_rev += orders * sc.nonurgent_order_revenue
+            outsource_expenses += orders * getattr(sc, "outsource_cost_nonurgent", 40.0)
+            outsource_nonurgent_fulfilled += orders
+            outsource_total += orders
+        else:
+            demand_flat.append({
+                "zone_id":          zid,
+                "x":                spot["x"],
+                "y":                spot["y"],
+                "urgent_orders":    0,
+                "nonurgent_orders": orders,
+            })
 
     # Attach coordinates to warehouses from the scenario's warehouse slots
     slots_by_id = {s["id"]: s for s in json.loads(sc.warehouse_slots)}
@@ -690,6 +799,20 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
         current_quarter=ran_quarter,
         service_radius=sc.warehouse_service_radius,
     )
+
+    # Combine outsourcing with warehouse simulation results
+    outsource_revenue = outsource_urgent_rev + outsource_nonurgent_rev
+    outsource_fulfilled = outsource_urgent_fulfilled + outsource_nonurgent_fulfilled
+    result["revenue"] = result["revenue"] + outsource_revenue
+    result["urgent_revenue"] = result["urgent_revenue"] + outsource_urgent_rev
+    result["nonurgent_revenue"] = result["nonurgent_revenue"] + outsource_nonurgent_rev
+    result["operating_cost"] = result["operating_cost"] + outsource_expenses
+    result["profit"] = result["revenue"] - result["operating_cost"]
+    result["orders_fulfilled"] = result["orders_fulfilled"] + outsource_fulfilled
+    result["orders_total"] = result["orders_total"] + outsource_total
+    result["urgent_fulfilled"] = result["urgent_fulfilled"] + outsource_urgent_fulfilled
+    result["nonurgent_fulfilled"] = result["nonurgent_fulfilled"] + outsource_nonurgent_fulfilled
+    result["serving_pct"] = round((result["orders_fulfilled"] / result["orders_total"]) if result["orders_total"] > 0 else 0.0, 4)
 
     play.cash += result["profit"]
 
@@ -719,6 +842,8 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
         large_utilization=wtu.get("large"),
         drone_cost=result["drone_cost"],
         truck_cost=result["truck_cost"],
+        outsource_expenses=outsource_expenses,
+        outsource_revenue=outsource_revenue,
     )
     db.add(qr)
 
@@ -746,24 +871,27 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
         "warehouse_type_utilization": result["warehouse_type_utilization"],
         "drone_cost":               result["drone_cost"],
         "truck_cost":               result["truck_cost"],
+        "outsource_expenses":       outsource_expenses,
+        "outsource_revenue":        outsource_revenue,
     })
     play.quarterly_results = json.dumps(qr_list)
 
     # Advance or complete
+    next_q = ran_quarter
     if ran_quarter >= sc.total_quarters:
         play.completed = True
     else:
         play.current_quarter = ran_quarter + 1
+        next_q = play.current_quarter
+        # Advance warehouse builds to the new quarter so they are active for the planning phase
+        advance_warehouse_builds(play.warehouses, next_q, wh_cfg)
 
+    # Clear outsourced zones for the next planning quarter
+    play.outsourced_zones = json.dumps([])
     db.commit()
 
-    # Return updated warehouse states so frontend syncs build status.
-    # is_active and quarters_until_active must both be reported relative to
-    # ran_quarter (the quarter that was just simulated), matching
-    # orders_fulfilled/profit above — NOT the incremented current_quarter.
-    # Otherwise a warehouse can show is_active=True / quarters_until_active=0
-    # in the same response where orders_fulfilled=0 for that warehouse,
-    # which looks like construction completed instantly.
+    # Return updated warehouse states relative to the next planning quarter (next_q)
+    # so the frontend planning state is correctly initialized as active/ready.
     warehouse_states = [
         {
             "id":                    wh.id,
@@ -772,8 +900,8 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
             "is_active":             wh.is_active,
             "is_sold":               wh.is_sold,
             "built_at_quarter":      wh.built_at_quarter,
-            "quarters_until_active": quarters_until_active(wh, wh_cfg, ran_quarter),
-            "activates_next_run":    (not wh.is_active) and quarters_until_active(wh, wh_cfg, ran_quarter + 1) == 0,
+            "quarters_until_active": quarters_until_active(wh, wh_cfg, next_q),
+            "activates_next_run":    (not wh.is_active) and quarters_until_active(wh, wh_cfg, next_q + 1) == 0,
             "vehicle_counts":        count_vehicles(wh.vehicles),
             "vehicles":              json.loads(wh.vehicles),
         }

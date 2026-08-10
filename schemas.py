@@ -59,6 +59,12 @@ class ScenarioCreate(BaseModel):
     urgent_demand_ratio:   float = 0.3
     demand_reveal_start_quarter: int = 6
     warehouse_service_radius: int = 30
+    allow_sell_warehouses: bool = True
+    allow_sell_trucks:     bool = True
+    allow_sell_drones:     bool = True
+    allow_outsourcing:        bool = False
+    outsource_cost_urgent:    float = 75.0
+    outsource_cost_nonurgent: float = 40.0
 
     warehouse_slots:       List[MapSlot] = []
     demand_zone_positions: List[MapSlot] = []
@@ -78,6 +84,12 @@ class ScenarioUpdate(ScenarioCreate):
     urgent_demand_ratio:     Optional[float] = None
     demand_reveal_start_quarter: Optional[int] = None
     warehouse_service_radius: Optional[int] = None
+    allow_sell_warehouses: Optional[bool] = None
+    allow_sell_trucks:     Optional[bool] = None
+    allow_sell_drones:     Optional[bool] = None
+    allow_outsourcing:        Optional[bool] = None
+    outsource_cost_urgent:    Optional[float] = None
+    outsource_cost_nonurgent: Optional[float] = None
     warehouse_slots:          Optional[List[MapSlot]] = None
     demand_zone_positions:    Optional[List[MapSlot]] = None
 
@@ -88,6 +100,7 @@ class ScenarioOut(BaseModel):
     name:            str
     total_quarters:  int
     starting_budget: float
+    created_at:      Optional[str] = None
 
     warehouse_config:  Dict[str, Any]
     vehicle_config:    Dict[str, Any]
@@ -100,6 +113,12 @@ class ScenarioOut(BaseModel):
     urgent_demand_ratio:   float
     demand_reveal_start_quarter: int
     warehouse_service_radius: int
+    allow_sell_warehouses: bool
+    allow_sell_trucks:     bool
+    allow_sell_drones:     bool
+    allow_outsourcing:        bool
+    outsource_cost_urgent:    float
+    outsource_cost_nonurgent: float
 
     warehouse_slots:       List[Any]
     demand_zone_positions: List[Any]
@@ -116,6 +135,7 @@ class ScenarioOut(BaseModel):
             name=obj.name,
             total_quarters=obj.total_quarters,
             starting_budget=obj.starting_budget,
+            created_at=obj.created_at.isoformat() if obj.created_at else None,
             warehouse_config=json.loads(obj.warehouse_config),
             vehicle_config=json.loads(obj.vehicle_config),
             urgent_order_revenue=obj.urgent_order_revenue,
@@ -125,6 +145,12 @@ class ScenarioOut(BaseModel):
             urgent_demand_ratio=obj.urgent_demand_ratio,
             demand_reveal_start_quarter=obj.demand_reveal_start_quarter,
             warehouse_service_radius=obj.warehouse_service_radius,
+            allow_sell_warehouses=getattr(obj, "allow_sell_warehouses", True),
+            allow_sell_trucks=getattr(obj, "allow_sell_trucks", True),
+            allow_sell_drones=getattr(obj, "allow_sell_drones", True),
+            allow_outsourcing=getattr(obj, "allow_outsourcing", False),
+            outsource_cost_urgent=getattr(obj, "outsource_cost_urgent", 75.0),
+            outsource_cost_nonurgent=getattr(obj, "outsource_cost_nonurgent", 40.0),
             warehouse_slots=json.loads(obj.warehouse_slots),
             demand_zone_positions=json.loads(obj.demand_zone_positions),
         )
@@ -136,6 +162,11 @@ class ScenarioOut(BaseModel):
 class PlayCreate(BaseModel):
     scenario_code: str           # student enters this
     student_name:  Optional[str] = None
+
+
+class OutsourceZoneRequest(BaseModel):
+    zone_id:    str
+    outsourced: bool
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -194,6 +225,8 @@ class QuarterResultOut(BaseModel):
     utilization_rate: float
     serving_pct:      float
     stockouts:        int
+    outsource_expenses: float = 0.0
+    outsource_revenue:  float = 0.0
 
     class Config:
         from_attributes = True
