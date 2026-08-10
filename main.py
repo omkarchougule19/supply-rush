@@ -47,10 +47,10 @@ with engine.connect() as conn:
 
     # 2. scenarios table migrations (sell restrictions & outsourcing)
     scenario_columns = [
-        ("allow_sell_warehouses", "BOOLEAN", "1"),
-        ("allow_sell_trucks",     "BOOLEAN", "1"),
-        ("allow_sell_drones",     "BOOLEAN", "1"),
-        ("allow_outsourcing",     "BOOLEAN", "0"),
+        ("allow_sell_warehouses", "BOOLEAN", "TRUE"),
+        ("allow_sell_trucks",     "BOOLEAN", "TRUE"),
+        ("allow_sell_drones",     "BOOLEAN", "TRUE"),
+        ("allow_outsourcing",     "BOOLEAN", "FALSE"),
         ("outsource_cost_urgent", "FLOAT",   "75.0"),
         ("outsource_cost_nonurgent", "FLOAT", "40.0"),
     ]
