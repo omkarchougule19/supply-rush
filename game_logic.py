@@ -60,7 +60,8 @@ def generate_play_id() -> str:
 #  Called once per play, at creation time.
 # ─────────────────────────────────────────────────────────────────────────────
 ZONE_SELECTION_RATIO  = 1.0   # fraction of the master zone list used by a given play
-INITIAL_REVEAL_RATIO  = 0.7   # fraction of the selected zones revealed at Quarter 0
+INITIAL_REVEAL_RATIO  = 0.5   # fraction of the selected zones revealed at Quarter 0
+                               # (the remaining 50% unlock progressively during gameplay)
 
 
 def _spread_quarters(count: int, start_quarter: int, end_quarter: int) -> List[int]:
@@ -144,7 +145,10 @@ def generate_demand(
 ) -> Dict:
     """
     Generate demand for the quarter, scaling the target number of active zones
-    linearly from 50% in Quarter 1 to 100% in the second-to-last quarter.
+    linearly from 50% of currently-revealed zones in Quarter 1 to 100% by the
+    second-to-last quarter. The reveal schedule (set at play creation) controls
+    how many zones are eligible each quarter; this ramp controls what fraction
+    of those eligible zones actually produce demand.
     """
     r = random.Random(seed) if seed is not None else random
 
@@ -246,7 +250,7 @@ def get_warehouse_vehicle_capacity(vehicles_json: str, vehicle_config: Dict) -> 
                             60 orders total this quarter, split however
                             fulfillment needs it — not up to 60 of each.
     """
-    vehicles = json.loads(vehicles_json)
+    vehicles = json.loads(vehicles_json or "[]")
     dedicated_urgent = 0
     dedicated_nonurgent = 0
     flexible = 0
@@ -272,7 +276,7 @@ def get_warehouse_vehicle_capacity(vehicles_json: str, vehicle_config: Dict) -> 
 
 
 def get_vehicle_operating_cost(vehicles_json: str, vehicle_config: Dict) -> float:
-    vehicles = json.loads(vehicles_json)
+    vehicles = json.loads(vehicles_json or "[]")
     total = 0.0
     for v in vehicles:
         if v.get("is_sold"):
@@ -284,7 +288,7 @@ def get_vehicle_operating_cost(vehicles_json: str, vehicle_config: Dict) -> floa
 
 def count_vehicles(vehicles_json: str) -> Dict[str, int]:
     """Return {type: count} for all active (unsold) vehicles."""
-    vehicles = json.loads(vehicles_json)
+    vehicles = json.loads(vehicles_json or "[]")
     counts: Dict[str, int] = {}
     for v in vehicles:
         if not v.get("is_sold"):
@@ -299,7 +303,7 @@ def get_assigned_vehicle_capacity(vehicles_json: str, vehicle_config: Dict) -> f
     warehouse's own capacity rating — you can't stock a small (500/qtr)
     warehouse with more fleet capacity than it can actually hold.
     """
-    vehicles = json.loads(vehicles_json)
+    vehicles = json.loads(vehicles_json or "[]")
     total = 0.0
     for v in vehicles:
         if v.get("is_sold"):

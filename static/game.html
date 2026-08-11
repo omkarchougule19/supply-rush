@@ -662,6 +662,13 @@ function exitToHome(discard) {
     : "Exit to home? Your current quarter progress will be lost.";
   showConfirm(title, msg, function() {
     closePause();
+    hideDeliveryOverlay();
+    document.getElementById("wh-panel").classList.remove("open");
+    var rSidebar = document.getElementById("results-sidebar");
+    if (rSidebar) rSidebar.classList.remove("show");
+    var legend = document.getElementById("legend-panel");
+    if (legend) legend.style.display = "";
+
     state.exiting = true;
     // Reset state
     state.playId = null; state.completed = false;
@@ -1246,6 +1253,7 @@ function fetchDemand() {
   fetch(API+"/sessions/"+state.playId+"/demand")
     .then(function(r){ return r.ok?r.json():Promise.reject(); })
     .then(function(d){
+      if (!state.playId) return;
       var zones = d.demand_zones || {};
       state.urgentSpots    = zones.urgent    || [];
       state.nonurgentSpots = zones.nonurgent || [];
@@ -1370,6 +1378,7 @@ function toggleOutsourceZone(zoneId, el) {
     body: JSON.stringify({ zone_id: zoneId, outsourced: outsourced })
   }).then(function(r) { return r.ok ? r.json() : r.json().then(function(e){ throw e; }); })
     .then(function(d) {
+      if (!state.playId) return;
       state.outsourcedZones = d.outsourced_zones;
       el.classList.toggle("on");
       renderDemandSpots(); renderRoutes();
@@ -1454,8 +1463,11 @@ function confirmBuy() {
     method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({slot_id:state.selectedSlotId,warehouse_type:type})
   }).then(function(r){ return r.ok?r.json():r.json().then(function(e){throw e;}); })
-    .then(function(d){ doPlace({id:d.warehouse_id, cashLeft:d.cash_remaining,
-      isActive:d.is_active, quartersUntilActive:d.quarters_until_active, activatesNextRun:d.activates_next_run}); })
+    .then(function(d){
+      if (!state.playId) return;
+      doPlace({id:d.warehouse_id, cashLeft:d.cash_remaining,
+      isActive:d.is_active, quartersUntilActive:d.quarters_until_active, activatesNextRun:d.activates_next_run});
+    })
     .catch(function(e){ showPanelError((e&&e.detail)||"Error placing warehouse."); });
 }
 
@@ -1653,6 +1665,7 @@ function adjustVehicle(whId, type, action) {
       body:JSON.stringify({warehouse_id:whId,vehicle_type:type})
     }).then(function(r){ return r.ok?r.json():r.json().then(function(e){throw e;}); })
       .then(function(d){
+        if (!state.playId) return;
         wh.vehicles = d.vehicles;
         var counts = {};
         d.vehicles.forEach(function(v){ if(!v.is_sold) counts[v.type]=(counts[v.type]||0)+1; });
@@ -1692,6 +1705,7 @@ function adjustVehicle(whId, type, action) {
       body:JSON.stringify({warehouse_id:whId,vehicle_id:targetVeh.id})
     }).then(function(r){ return r.ok?r.json():r.json().then(function(e){throw e;}); })
       .then(function(d){
+        if (!state.playId) return;
         targetVeh.is_sold = true;
         wh.vehicleCounts[type] = Math.max(0,(wh.vehicleCounts[type]||1)-1);
         refresh(d.cash_remaining, wh.vehicleCounts, d.pending_vehicle_net_cost);
@@ -1738,7 +1752,10 @@ function sellWarehouse(whId, confirmState) {
     method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({warehouse_id:whId})
   }).then(function(r){ return r.ok?r.json():r.json().then(function(e){throw e;}); })
-    .then(function(d){ doSell(d.cash_remaining); })
+    .then(function(d){
+      if (!state.playId) return;
+      doSell(d.cash_remaining);
+    })
     .catch(function(e){ showPanelError((e&&e.detail)||"Error selling warehouse."); });
 }
 
@@ -1774,6 +1791,7 @@ function runQuarter() {
   var animDone = !hasAnimation, backendDone = false, pendingResult = null;
 
   function tryFinish() {
+    if (!state.playId) return;
     if (!animDone || !backendDone) return;
     if (hasAnimation) hideDeliveryOverlay();
     done(pendingResult);
@@ -1784,6 +1802,7 @@ function runQuarter() {
   }
 
   function done(result) {
+    if (!state.playId) return;
     // Settle & reset the pending vehicle indicator — real backend already
     // folded this quarter's net vehicle cost into cash_after and returns
     // pending_vehicle_net_cost:0; demo mode needs its own ledger cleared.

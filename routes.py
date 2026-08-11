@@ -51,7 +51,7 @@ def _parse_scenario(sc: Scenario) -> ScenarioOut:
 
 
 def _play_response(play: Play, sc: Scenario) -> dict:
-    v_cfg = json.loads(sc.vehicle_config) if sc else {}
+    v_cfg = json.loads(sc.vehicle_config or "{}") if sc else {}
     pending_deltas = json.loads(play.pending_vehicle_deltas or "{}")
     return {
         "play_id":         play.play_id,
@@ -63,7 +63,7 @@ def _play_response(play: Play, sc: Scenario) -> dict:
         "cash":            play.cash,
         "pending_vehicle_net_cost": compute_pending_vehicle_net_cost(pending_deltas, v_cfg),
         "completed":       play.completed,
-        "quarterly_results": json.loads(play.quarterly_results),
+        "quarterly_results": json.loads(play.quarterly_results or "[]"),
         "outsourced_zones":  json.loads(play.outsourced_zones or "[]"),
         "scenario":        _parse_scenario(sc) if sc else None,
     }
@@ -218,7 +218,7 @@ def list_all_plays(
             "total_quarters":  p.scenario.total_quarters if p.scenario else 16,
             "cash":            p.cash,
             "completed":       p.completed,
-            "quarterly_results": json.loads(p.quarterly_results),
+            "quarterly_results": json.loads(p.quarterly_results or "[]"),
         }
         for p in plays
     ]
@@ -232,7 +232,7 @@ def start_play(payload: PlayCreate, db: Session = Depends(get_db)):
     """Student enters a scenario code → creates a new play."""
     sc = _get_scenario_or_404(payload.scenario_code.upper(), db)
     pid = generate_play_id()
-    master_zones = json.loads(sc.demand_zone_positions)
+    master_zones = json.loads(sc.demand_zone_positions or "[]")
     schedule = select_and_schedule_demand_zones(
         master_zones, sc.total_quarters, sc.demand_reveal_start_quarter
     )
@@ -296,7 +296,7 @@ def start_normal_play(payload: NormalModeStart, db: Session = Depends(get_db)):
         db.refresh(sc)
 
     pid = generate_play_id()
-    master_zones = json.loads(sc.demand_zone_positions)
+    master_zones = json.loads(sc.demand_zone_positions or "[]")
     schedule = select_and_schedule_demand_zones(
         master_zones, sc.total_quarters, sc.demand_reveal_start_quarter
     )
@@ -360,12 +360,12 @@ def place_warehouse(play_id: str, payload: PlaceWarehouseRequest, db: Session = 
         raise HTTPException(400, "Game is already complete")
 
     sc = play.scenario
-    wh_cfg = json.loads(sc.warehouse_config)
+    wh_cfg = json.loads(sc.warehouse_config or "{}")
     cfg = wh_cfg.get(payload.warehouse_type)
     if not cfg:
         raise HTTPException(400, f"Unknown warehouse type: {payload.warehouse_type}")
 
-    v_cfg = json.loads(sc.vehicle_config)
+    v_cfg = json.loads(sc.vehicle_config or "{}")
     deltas = json.loads(play.pending_vehicle_deltas or "{}")
     pending_net_cost = compute_pending_vehicle_net_cost(deltas, v_cfg)
     cost = cfg["purchase_cost"]
@@ -426,7 +426,7 @@ def add_vehicle(play_id: str, payload: AddVehicleRequest, db: Session = Depends(
         raise HTTPException(404, "Warehouse not found")
 
     sc = play.scenario
-    v_cfg = json.loads(sc.vehicle_config)
+    v_cfg = json.loads(sc.vehicle_config or "{}")
     cfg = v_cfg.get(payload.vehicle_type)
     if not cfg:
         raise HTTPException(400, f"Unknown vehicle type: {payload.vehicle_type}")
@@ -434,7 +434,7 @@ def add_vehicle(play_id: str, payload: AddVehicleRequest, db: Session = Depends(
     # A warehouse can only hold as much fleet capacity as its own capacity
     # rating — a small (500/qtr) warehouse can't be stocked with, say, 10
     # trucks (2,000/qtr of capacity) just because the player can afford them.
-    wh_cfg = json.loads(sc.warehouse_config)
+    wh_cfg = json.loads(sc.warehouse_config or "{}")
     wh_capacity_limit = wh_cfg.get(wh.warehouse_type, {}).get("capacity", 0)
     used_capacity = get_assigned_vehicle_capacity(wh.vehicles, v_cfg)
     if used_capacity + cfg["capacity"] > wh_capacity_limit:
@@ -463,7 +463,7 @@ def add_vehicle(play_id: str, payload: AddVehicleRequest, db: Session = Depends(
 
     import uuid
     play.pending_vehicle_deltas = json.dumps(deltas)
-    vehicles = json.loads(wh.vehicles)
+    vehicles = json.loads(wh.vehicles or "[]")
     vehicle_id = uuid.uuid4().hex[:8]
     vehicles.append({"id": vehicle_id, "type": payload.vehicle_type, "purchased_at": play.current_quarter, "is_sold": False})
     wh.vehicles = json.dumps(vehicles)
@@ -490,12 +490,12 @@ def sell_warehouse(play_id: str, payload: SellWarehouseRequest, db: Session = De
     if not getattr(sc, "allow_sell_warehouses", True):
         raise HTTPException(400, "Selling warehouses is disabled in this scenario")
 
-    wh_cfg = json.loads(sc.warehouse_config)
+    wh_cfg = json.loads(sc.warehouse_config or "{}")
     sell_price = wh_cfg[wh.warehouse_type]["sell_back"]
     
     # Auto-refund any active vehicles inside the sold warehouse
-    v_cfg = json.loads(sc.vehicle_config)
-    vehicles = json.loads(wh.vehicles)
+    v_cfg = json.loads(sc.vehicle_config or "{}")
+    vehicles = json.loads(wh.vehicles or "[]")
     deltas = json.loads(play.pending_vehicle_deltas or "{}")
     for v in vehicles:
         if not v.get("is_sold"):
@@ -531,7 +531,7 @@ def sell_vehicle(play_id: str, payload: SellVehicleRequest, db: Session = Depend
         raise HTTPException(404, "Warehouse not found")
 
     import uuid
-    vehicles = json.loads(wh.vehicles)
+    vehicles = json.loads(wh.vehicles or "[]")
     # Backfill unique IDs for legacy vehicles
     for i, v in enumerate(vehicles):
         if "id" not in v:
@@ -547,7 +547,7 @@ def sell_vehicle(play_id: str, payload: SellVehicleRequest, db: Session = Depend
         raise HTTPException(400, "Vehicle not found or already sold")
 
     sc = play.scenario
-    v_cfg = json.loads(sc.vehicle_config)
+    v_cfg = json.loads(sc.vehicle_config or "{}")
     vtype = target_vehicle["type"]
     if vtype == "truck" and not getattr(sc, "allow_sell_trucks", True):
         raise HTTPException(400, "Selling trucks is disabled in this scenario")
@@ -576,7 +576,7 @@ def sell_vehicle(play_id: str, payload: SellVehicleRequest, db: Session = Depend
 def get_warehouses(play_id: str, db: Session = Depends(get_db)):
     play = _get_play_or_404(play_id, db)
     sc   = play.scenario
-    wh_cfg = json.loads(sc.warehouse_config)
+    wh_cfg = json.loads(sc.warehouse_config or "{}")
     ref_quarter = 1 if play.current_quarter == 0 else play.current_quarter
     return [
         {
@@ -586,7 +586,7 @@ def get_warehouses(play_id: str, db: Session = Depends(get_db)):
             "built_at_quarter":    wh.built_at_quarter,
             "is_active":           wh.is_active,
             "is_sold":             wh.is_sold,
-            "vehicles":            json.loads(wh.vehicles),
+            "vehicles":            json.loads(wh.vehicles or "[]"),
             "vehicle_counts":      count_vehicles(wh.vehicles),
             "quarters_until_active": quarters_until_active(wh, wh_cfg, play.current_quarter),
             "activates_next_run":    (not wh.is_active) and quarters_until_active(wh, wh_cfg, ref_quarter) == 0,
@@ -616,13 +616,13 @@ def get_demand(play_id: str, db: Session = Depends(get_db)):
     """
     play = _get_play_or_404(play_id, db)
     sc   = play.scenario
-    schedule = json.loads(play.demand_zone_schedule)
+    schedule = json.loads(play.demand_zone_schedule or '[]')
     revealed = get_revealed_zones(schedule, play.current_quarter)
 
     if play.current_quarter == 0:
         demand = {"urgent": [], "nonurgent": []}
     else:
-        activated = json.loads(play.activated_demand_zones)
+        activated = json.loads(play.activated_demand_zones or '{"urgent": [], "nonurgent": []}')
         seed = play.id * 100 + play.current_quarter
         demand = generate_demand(
             demand_zone_positions=revealed,
@@ -646,8 +646,8 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
         raise HTTPException(400, "Game is already complete")
 
     sc     = play.scenario
-    wh_cfg = json.loads(sc.warehouse_config)
-    v_cfg  = json.loads(sc.vehicle_config)
+    wh_cfg = json.loads(sc.warehouse_config or "{}")
+    v_cfg  = json.loads(sc.vehicle_config or "{}")
 
     # Settle this quarter's pending vehicle buy/sell actions now, netted per
     # type (see compute_pending_vehicle_net_cost) — this is the moment
@@ -690,7 +690,7 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
                 "quarters_until_active": quarters_until_active(wh, wh_cfg, 1),
                 "activates_next_run":    (not wh.is_active) and quarters_until_active(wh, wh_cfg, 1) == 0,
                 "vehicle_counts":        count_vehicles(wh.vehicles),
-                "vehicles":              json.loads(wh.vehicles),
+                "vehicles":              json.loads(wh.vehicles or "[]"),
             }
             for wh in play.warehouses if not wh.is_sold
         ]
@@ -710,9 +710,9 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
     # ── Quarters 1+ (normal play) ────────────────────────────────────────
     ran_quarter = play.current_quarter
 
-    schedule  = json.loads(play.demand_zone_schedule)
+    schedule  = json.loads(play.demand_zone_schedule or '[]')
     revealed  = get_revealed_zones(schedule, ran_quarter)
-    activated = json.loads(play.activated_demand_zones)
+    activated = json.loads(play.activated_demand_zones or '{"urgent": [], "nonurgent": []}')
     seed      = play.id * 100 + ran_quarter
 
     advance_warehouse_builds(play.warehouses, ran_quarter, wh_cfg)
@@ -779,7 +779,7 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
             })
 
     # Attach coordinates to warehouses from the scenario's warehouse slots
-    slots_by_id = {s["id"]: s for s in json.loads(sc.warehouse_slots)}
+    slots_by_id = {s["id"]: s for s in json.loads(sc.warehouse_slots or "[]")}
     for wh in play.warehouses:
         slot = slots_by_id.get(wh.slot_id)
         if slot:
@@ -848,7 +848,7 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
     db.add(qr)
 
     # Mirror into Play.quarterly_results JSON
-    qr_list = json.loads(play.quarterly_results)
+    qr_list = json.loads(play.quarterly_results or "[]")
     qr_list.append({
         "quarter":                  ran_quarter,
         "revenue":                  result["revenue"],
@@ -903,7 +903,7 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
             "quarters_until_active": quarters_until_active(wh, wh_cfg, next_q),
             "activates_next_run":    (not wh.is_active) and quarters_until_active(wh, wh_cfg, next_q + 1) == 0,
             "vehicle_counts":        count_vehicles(wh.vehicles),
-            "vehicles":              json.loads(wh.vehicles),
+            "vehicles":              json.loads(wh.vehicles or "[]"),
         }
         for wh in play.warehouses if not wh.is_sold
     ]
@@ -923,4 +923,4 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
 def get_history(play_id: str, db: Session = Depends(get_db)):
     """Full P&L history for the sidebar."""
     play = _get_play_or_404(play_id, db)
-    return json.loads(play.quarterly_results)
+    return json.loads(play.quarterly_results or "[]")
