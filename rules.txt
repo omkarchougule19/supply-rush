@@ -133,3 +133,12 @@ Vehicles handle deliveries from warehouses. Drones are the only vehicles that ca
   2. **Frontend (`game.html`):** Add `if (outsourced.indexOf(z.zone_id) !== -1) return;` at the beginning of the `allSpots.forEach` loop in `localSim()` to prevent warehouse assignment for outsourced zones.
   3. **Frontend (`game.html`):** In `renderRemainingDemand()`, check if a zone is outsourced and force its remaining demand value to `0`.
   4. **Verification:** Verified that outsourcing persistent toggles remain consistent across quarters, localSim results align, and remaining demand on outsourced spots properly drops to 0.
+
+### Feature: Relocation Toggle ('allowing moving trucks & drones')
+* **Idea:** Add an instructor configuration setting to toggle whether same-quarter vehicle relocations are free or subject to depreciation.
+  1. **Toggle Behavior**: If the toggle is ON, players face the depreciation penalty even if they buy and sell in the same quarter (no netting allowed). If it is OFF, the current behavior (free relocations when buy and sell match in the same quarter) is maintained.
+* **Working Steps:**
+  1. **Database (`models.py`, `main.py`):** Added the `allow_moving_vehicles` boolean column (default `False`) and ran a startup migration to add it to existing databases.
+  2. **API & Logic (`schemas.py`, `routes.py`, `game_logic.py`):** Added the property to scenario schemas. Passed it into `compute_pending_vehicle_net_cost()` and modified the cost logic to skip netting same-quarter buy/sells when active.
+  3. **Frontend (`game.html`, `instructor_dashboard.html`):** Added toggle element to the dashboard form. Collected, reset, and parsed it. Updated client-side JavaScript simulator `computePendingVehicleNetCost` to mirror the toggle depreciation behavior.
+  4. **Verification:** Verified compilation, migrations, and cost-calculations in both ON and OFF toggle states.

@@ -68,6 +68,7 @@ class Scenario(Base):
     allow_outsourcing        = Column(Boolean, default=False, nullable=False)
     outsource_cost_urgent    = Column(Float, default=75.0, nullable=False)
     outsource_cost_nonurgent = Column(Float, default=40.0, nullable=False)
+    allow_moving_vehicles    = Column(Boolean, default=False, nullable=False)
 
     # ── Map layout ────────────────────────────────────────────────────────────
     warehouse_slots       = Column(Text, default=json.dumps([]))  # [{id, x, y}, ...]

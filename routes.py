@@ -61,7 +61,9 @@ def _play_response(play: Play, sc: Scenario) -> dict:
         "current_quarter": play.current_quarter,
         "total_quarters":  sc.total_quarters if sc else 16,
         "cash":            play.cash,
-        "pending_vehicle_net_cost": compute_pending_vehicle_net_cost(pending_deltas, v_cfg),
+        "pending_vehicle_net_cost": compute_pending_vehicle_net_cost(
+            pending_deltas, v_cfg, allow_moving_vehicles=getattr(sc, "allow_moving_vehicles", False) if sc else False
+        ),
         "completed":       play.completed,
         "quarterly_results": json.loads(play.quarterly_results or "[]"),
         "outsourced_zones":  json.loads(play.outsourced_zones or "[]"),
@@ -107,6 +109,7 @@ def create_scenario(payload: ScenarioCreate, db: Session = Depends(get_db)):
         allow_outsourcing=payload.allow_outsourcing,
         outsource_cost_urgent=payload.outsource_cost_urgent,
         outsource_cost_nonurgent=payload.outsource_cost_nonurgent,
+        allow_moving_vehicles=payload.allow_moving_vehicles,
         warehouse_slots=json.dumps(wh_slots),
         demand_zone_positions=json.dumps(demand_zones),
     )
@@ -148,6 +151,8 @@ def update_scenario(code: str, payload: ScenarioUpdate, db: Session = Depends(ge
     if payload.allow_sell_warehouses is not None: sc.allow_sell_warehouses = payload.allow_sell_warehouses
     if payload.allow_sell_trucks     is not None: sc.allow_sell_trucks     = payload.allow_sell_trucks
     if payload.allow_sell_drones     is not None: sc.allow_sell_drones     = payload.allow_sell_drones
+    if payload.allow_moving_vehicles is not None: sc.allow_moving_vehicles = payload.allow_moving_vehicles
+    if sc.allow_moving_vehicles is None: sc.allow_moving_vehicles = False
     if payload.warehouse_slots is not None:
         wh_slots = [s.dict() for s in payload.warehouse_slots]
         if not wh_slots:
@@ -459,7 +464,9 @@ def add_vehicle(play_id: str, payload: AddVehicleRequest, db: Session = Depends(
     type_deltas["bought"] += 1
     deltas[payload.vehicle_type] = type_deltas
 
-    projected_net_cost = compute_pending_vehicle_net_cost(deltas, v_cfg)
+    projected_net_cost = compute_pending_vehicle_net_cost(
+        deltas, v_cfg, allow_moving_vehicles=getattr(sc, "allow_moving_vehicles", False)
+    )
     if play.cash - projected_net_cost < 0:
         raise HTTPException(400, f"Insufficient cash: this purchase would need ${projected_net_cost:,.0f} net this quarter, have ${play.cash:,.0f}")
 
@@ -566,7 +573,9 @@ def sell_vehicle(play_id: str, payload: SellVehicleRequest, db: Session = Depend
     wh.vehicles = json.dumps(vehicles)
     db.commit()
 
-    projected_net_cost = compute_pending_vehicle_net_cost(deltas, v_cfg)
+    projected_net_cost = compute_pending_vehicle_net_cost(
+        deltas, v_cfg, allow_moving_vehicles=getattr(sc, "allow_moving_vehicles", False)
+    )
     return {
         "sell_price": v_cfg[vtype]["sell_back"],
         "cash_remaining": play.cash,  # unchanged — confirmed cash, frozen until Run Quarter
@@ -657,7 +666,9 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
     # during planning. Then reset the ledger so nothing carries into the
     # next quarter's planning window.
     pending_deltas = json.loads(play.pending_vehicle_deltas or "{}")
-    pending_net_cost = compute_pending_vehicle_net_cost(pending_deltas, v_cfg)
+    pending_net_cost = compute_pending_vehicle_net_cost(
+        pending_deltas, v_cfg, allow_moving_vehicles=getattr(sc, "allow_moving_vehicles", False)
+    )
     play.cash -= pending_net_cost
     play.pending_vehicle_deltas = json.dumps({})
 

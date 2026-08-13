@@ -275,6 +275,12 @@
               <div class="toggle on" id="sc_allow_sell_drones" onclick="toggleEl(this)"></div>
             </div>
           </div>
+          <div class="form-group">
+            <label>Allowing moving trucks & drones</label>
+            <div class="toggle-row">
+              <div class="toggle" id="sc_allow_moving_vehicles" onclick="toggleEl(this)"></div>
+            </div>
+          </div>
         </div>
       </div>
       <!-- Outsourcing Rules -->
@@ -521,6 +527,7 @@
       allow_sell_warehouses: isOn("sc_allow_sell_wh"),
       allow_sell_trucks:     isOn("sc_allow_sell_trucks"),
       allow_sell_drones:     isOn("sc_allow_sell_drones"),
+      allow_moving_vehicles: isOn("sc_allow_moving_vehicles"),
       allow_outsourcing:        isOn("sc_allow_outsourcing"),
       outsource_cost_urgent:    +document.getElementById("sc_outsource_cost_urgent").value,
       outsource_cost_nonurgent: +document.getElementById("sc_outsource_cost_nonurgent").value,
@@ -933,6 +940,7 @@
     document.getElementById("sc_allow_sell_wh").classList.add("on");
     document.getElementById("sc_allow_sell_trucks").classList.add("on");
     document.getElementById("sc_allow_sell_drones").classList.add("on");
+    document.getElementById("sc_allow_moving_vehicles").classList.remove("on");
 
     document.getElementById("sc_allow_outsourcing").classList.remove("on");
     document.getElementById("sc_outsource_cost_urgent").value = "75";

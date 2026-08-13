@@ -65,6 +65,7 @@ class ScenarioCreate(BaseModel):
     allow_outsourcing:        bool = False
     outsource_cost_urgent:    float = 75.0
     outsource_cost_nonurgent: float = 40.0
+    allow_moving_vehicles:    bool = False
 
     warehouse_slots:       List[MapSlot] = []
     demand_zone_positions: List[MapSlot] = []
@@ -90,6 +91,7 @@ class ScenarioUpdate(ScenarioCreate):
     allow_outsourcing:        Optional[bool] = None
     outsource_cost_urgent:    Optional[float] = None
     outsource_cost_nonurgent: Optional[float] = None
+    allow_moving_vehicles:    Optional[bool] = None
     warehouse_slots:          Optional[List[MapSlot]] = None
     demand_zone_positions:    Optional[List[MapSlot]] = None
 
@@ -119,6 +121,7 @@ class ScenarioOut(BaseModel):
     allow_outsourcing:        bool
     outsource_cost_urgent:    float
     outsource_cost_nonurgent: float
+    allow_moving_vehicles:    bool
 
     warehouse_slots:       List[Any]
     demand_zone_positions: List[Any]
@@ -151,6 +154,7 @@ class ScenarioOut(BaseModel):
             allow_outsourcing=getattr(obj, "allow_outsourcing", False),
             outsource_cost_urgent=getattr(obj, "outsource_cost_urgent", 75.0),
             outsource_cost_nonurgent=getattr(obj, "outsource_cost_nonurgent", 40.0),
+            allow_moving_vehicles=getattr(obj, "allow_moving_vehicles", False),
             warehouse_slots=json.loads(obj.warehouse_slots),
             demand_zone_positions=json.loads(obj.demand_zone_positions),
         )

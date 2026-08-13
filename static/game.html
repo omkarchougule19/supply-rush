@@ -610,7 +610,7 @@ var DEMAND_POOL = [];
 
 var DEFAULT_SCENARIO = {
   total_quarters:16, starting_budget:3000000,
-  allow_outsourcing:true,
+  allow_outsourcing:true, allow_moving_vehicles:false,
   warehouse_config:{
     small:{purchase_cost:250000,capacity:500,build_quarters:1,sell_back:125000},
     medium:{purchase_cost:500000,capacity:1200,build_quarters:2,sell_back:250000},
@@ -1705,12 +1705,17 @@ function openManagePanel(slot, placed) {
 // fallback; the real backend does this authoritatively server-side.
 function computePendingVehicleNetCost(deltas, vehicleConfig) {
   var total = 0;
+  var allowMoving = state.scenario && state.scenario.allow_moving_vehicles;
   Object.keys(deltas).forEach(function(vtype) {
     var cfg = vehicleConfig[vtype];
     if (!cfg) return;
     var counts = deltas[vtype];
-    var net = (counts.bought||0) - (counts.sold||0);
-    total += net >= 0 ? net * cfg.purchase_cost : net * cfg.sell_back;
+    if (allowMoving) {
+      total += (counts.bought||0) * cfg.purchase_cost - (counts.sold||0) * cfg.sell_back;
+    } else {
+      var net = (counts.bought||0) - (counts.sold||0);
+      total += net >= 0 ? net * cfg.purchase_cost : net * cfg.sell_back;
+    }
   });
   return total;
 }

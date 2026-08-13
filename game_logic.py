@@ -313,7 +313,7 @@ def get_assigned_vehicle_capacity(vehicles_json: str, vehicle_config: Dict) -> f
     return total
 
 
-def compute_pending_vehicle_net_cost(pending_deltas: Dict, vehicle_config: Dict) -> float:
+def compute_pending_vehicle_net_cost(pending_deltas: Dict, vehicle_config: Dict, allow_moving_vehicles: bool = False) -> float:
     """
     Net cash impact of this quarter's not-yet-settled vehicle buy/sell
     actions, netted PER VEHICLE TYPE (a truck sale never offsets a drone
@@ -323,6 +323,8 @@ def compute_pending_vehicle_net_cost(pending_deltas: Dict, vehicle_config: Dict)
       net == 0 -> zero cost — buying and selling the same count nets to a
                   free relocation, regardless of which warehouse either
                   action happened at.
+    If allow_moving_vehicles is True, netting is disabled and same-quarter buy/sells
+    are not free; they face full depreciation penalty.
     Returns a single float: positive = net cost (cash goes down when
     settled), negative = net credit (cash goes up when settled).
     """
@@ -331,11 +333,15 @@ def compute_pending_vehicle_net_cost(pending_deltas: Dict, vehicle_config: Dict)
         cfg = vehicle_config.get(vtype)
         if not cfg:
             continue
-        net = counts.get("bought", 0) - counts.get("sold", 0)
-        if net >= 0:
-            total += net * cfg["purchase_cost"]
+        if allow_moving_vehicles:
+            total += counts.get("bought", 0) * cfg["purchase_cost"]
+            total -= counts.get("sold", 0) * cfg["sell_back"]
         else:
-            total += net * cfg["sell_back"]  # net is negative -> this subtracts (credit)
+            net = counts.get("bought", 0) - counts.get("sold", 0)
+            if net >= 0:
+                total += net * cfg["purchase_cost"]
+            else:
+                total += net * cfg["sell_back"]  # net is negative -> this subtracts (credit)
     return total
 
 

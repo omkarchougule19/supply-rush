@@ -59,6 +59,7 @@ try:
             ("allow_outsourcing",     "BOOLEAN", "FALSE"),
             ("outsource_cost_urgent", "FLOAT",   "75.0"),
             ("outsource_cost_nonurgent", "FLOAT", "40.0"),
+            ("allow_moving_vehicles", "BOOLEAN", "FALSE"),
         ]
         for col_name, col_type, default_val in scenario_columns:
             try:
