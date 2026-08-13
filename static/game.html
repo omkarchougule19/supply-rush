@@ -2093,6 +2093,8 @@ function localSim() {
 
   var allSpots = (state.urgentSpots||[]).concat(state.nonurgentSpots||[]);
   allSpots.forEach(function(z) {
+    var isOutsourced = outsourced.indexOf(z.zone_id) !== -1;
+    if (isOutsourced) return;
     var near=null, minD=Infinity;
     activeWhs.forEach(function(wh){
       var d=Math.sqrt(Math.pow(wh.x-z.x,2)+Math.pow(wh.y-z.y,2));
@@ -2219,7 +2221,8 @@ function renderRemainingDemand(r) {
   var mc = document.getElementById("mapContent");
 
   (state.urgentSpots||[]).forEach(function(z) {
-    var remaining = totalUrgent > 0 ? Math.round(z.orders * urgentSO / totalUrgent) : 0;
+    var isOutsourced = (state.outsourcedZones || []).indexOf(z.zone_id) !== -1;
+    var remaining = isOutsourced ? 0 : (totalUrgent > 0 ? Math.round(z.orders * urgentSO / totalUrgent) : 0);
     // update label
     var lbl = mc.querySelector(".demand-label[data-zone-id='"+z.zone_id+"']");
     if (lbl) lbl.textContent = remaining > 0 ? remaining.toLocaleString() : "0";
@@ -2232,7 +2235,8 @@ function renderRemainingDemand(r) {
   });
 
   (state.nonurgentSpots||[]).forEach(function(z) {
-    var remaining = totalNonurgent > 0 ? Math.round(z.orders * nonurgentSO / totalNonurgent) : 0;
+    var isOutsourced = (state.outsourcedZones || []).indexOf(z.zone_id) !== -1;
+    var remaining = isOutsourced ? 0 : (totalNonurgent > 0 ? Math.round(z.orders * nonurgentSO / totalNonurgent) : 0);
     var lbl = mc.querySelector(".demand-label[data-zone-id='"+z.zone_id+"']");
     if (lbl) lbl.textContent = remaining > 0 ? remaining.toLocaleString() : "0";
     var dot = mc.querySelector(".demand-spot.nonurgent[data-zone-id='"+z.zone_id+"']");
@@ -2248,7 +2252,6 @@ function dismissResultsSidebar(callback) {
   var legend  = document.getElementById("legend-panel");
   sidebar.classList.remove("show");
   legend.style.display = "";
-  state.outsourcedZones = [];
   updateHUD();
   if (callback) callback();
 }

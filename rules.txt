@@ -112,7 +112,9 @@ Vehicles handle deliveries from warehouses. Drones are the only vehicles that ca
   2. **Frontend:** Remove `state.outsourcedZones = [];` from `done(result)` in [game.html](static/game.html).
   3. **Frontend:** Update `fakeDemand()` in [game.html](static/game.html) to carry forward previous urgent/nonurgent active spots and evolve their order count.
   4. **Frontend:** Update `showDeliveryOverlay` in [game.html](static/game.html) to locate outsourced zones and animate their labels counting down to 0 during the delivery phase.
-  5. **Verification:** Run game session to verify persistent active zones, persistent outsourcing toggles, and countdowns.### Bug Fix & Quality of Life: Production Database Robustness and Offline Warning Banner
+  5. **Verification:** Run game session to verify persistent active zones, persistent outsourcing toggles, and countdowns.
+
+### Bug Fix & Quality of Life: Production Database Robustness and Offline Warning Banner
 * **Idea:**
   1. **Backend Robustness:** Ensure database operational issues (e.g. Postgres host down on boot, database connection drop) do not crash the FastAPI server startup. Handle connection issues gracefully by returning JSON 503/500 service messages rather than raw stack traces.
   2. **Frontend Offline Banner:** When the frontend fails to reach the backend, it falls back to client-side offline demo mode (`DEMO_ID`). Display a prominent yellow warning banner warning students that their progress is NOT being saved to the database.
@@ -120,3 +122,14 @@ Vehicles handle deliveries from warehouses. Drones are the only vehicles that ca
   1. **Backend (`main.py`):** Wrapped table creation and migration executions in a try-except block to prevent boot crashes. Added exception handlers for SQLAlchemy `OperationalError` and `DBAPIError`.
   2. **Frontend (`game.html`):** Added a `#demo-mode-banner` warning block and displayed it when `state.playId === DEMO_ID`.
   3. **Verification:** Verified compilation and startup resilience.
+
+### Bug Fix: Persistent Outsourcing Desync and localSim/Fulfillment Consistency
+* **Idea:** Correct the frontend and backend inconsistencies causing the outsourcing feature to be buggy.
+  1. **Persistent Outsourcing State:** The client-side array `state.outsourcedZones` was incorrectly reset to `[]` inside the `dismissResultsSidebar()` function when the player dismissed the performance sidebar, causing a visual reset on the map despite remaining active in the backend database.
+  2. **Offline localSim Fulfillment:** The client-side simulation fallback `localSim()` did not skip outsourced zones when allocating demand to active warehouses, leading to double-allocation of fleet/warehouse capacities to outsourced zones and causing desynced results.
+  3. **Fulfillment Remaining Demand:** In `renderRemainingDemand()`, remaining demand for outsourced zones was computed using general stockout ratios rather than being forced to 0 (since outsourced demand is always 100% fulfilled instantly), causing outsourced zones to falsely show remaining demand.
+* **Working Steps:**
+  1. **Frontend (`game.html`):** Remove `state.outsourcedZones = [];` from `dismissResultsSidebar()`.
+  2. **Frontend (`game.html`):** Add `if (outsourced.indexOf(z.zone_id) !== -1) return;` at the beginning of the `allSpots.forEach` loop in `localSim()` to prevent warehouse assignment for outsourced zones.
+  3. **Frontend (`game.html`):** In `renderRemainingDemand()`, check if a zone is outsourced and force its remaining demand value to `0`.
+  4. **Verification:** Verified that outsourcing persistent toggles remain consistent across quarters, localSim results align, and remaining demand on outsourced spots properly drops to 0.
