@@ -307,6 +307,12 @@
     .wh-fulfill-bar { height:7px; background:var(--border); border-radius:4px; overflow:hidden; }
     .wh-fulfill-fill { height:100%; border-radius:4px; transition:width .25s ease; }
 
+    /* TOGGLE SWITCH styling for 3PL outsourcing */
+    .toggle { width: 36px; height: 20px; background: var(--border); border-radius: 20px; position: relative; cursor: pointer; transition: background .2s; flex-shrink: 0; }
+    .toggle.on { background: var(--green); }
+    .toggle::after { content:''; position:absolute; top:3px; left:3px; width:14px; height:14px; border-radius:50%; background:#fff; transition: left .2s; }
+    .toggle.on::after { left: 19px; }
+
     /* DELIVERY ANIMATION */
     .delivery-banner { position:absolute; top:14px; left:50%; transform:translateX(-50%); background:rgba(10,18,32,.92); border:1px solid var(--border); border-radius:10px; padding:9px 20px; font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:13px; color:var(--accent); z-index:41; pointer-events:none; white-space:nowrap; box-shadow:0 4px 16px rgba(0,0,0,.35); }
     .delivery-vehicle { position:absolute; transform:translate(-50%,-50%); font-size:17px; transition: left 1.4s ease-in-out, top 1.4s ease-in-out, transform 1.4s ease-in-out; pointer-events:none; z-index:40; filter:drop-shadow(0 0 4px rgba(0,0,0,.6)); }
@@ -387,6 +393,10 @@
 
 <!-- GAME UI -->
 <div id="game-ui">
+  <!-- Offline demo banner -->
+  <div id="demo-mode-banner" style="background:#fbbf24; color:#0f172a; padding:10px 16px; font-weight:700; font-size:13px; font-family:'Space Grotesk',sans-serif; text-align:center; display:none; align-items:center; justify-content:center; gap:8px; z-index:100; position:relative; box-shadow:0 2px 8px rgba(251,191,36,0.25);">
+    <span>⚠️ Offline Demo Mode: Your progress is NOT being saved to the server. Check your internet connection or check with your instructor.</span>
+  </div>
   <!-- Global error toast banner -->
   <div id="global-error-banner" class="global-error-banner" style="display:none"></div>
   <div class="topbar">
@@ -600,6 +610,7 @@ var DEMAND_POOL = [];
 
 var DEFAULT_SCENARIO = {
   total_quarters:16, starting_budget:3000000,
+  allow_outsourcing:true,
   warehouse_config:{
     small:{purchase_cost:250000,capacity:500,build_quarters:1,sell_back:125000},
     medium:{purchase_cost:500000,capacity:1200,build_quarters:2,sell_back:250000},
@@ -762,6 +773,12 @@ function initGame(data) {
   document.getElementById("game-ui").className = "visible";
   pushPlayingHash();
   document.getElementById("legend-mode").textContent = state.scenarioCode ? ("Code: "+state.scenarioCode) : "Normal mode";
+
+  if (state.playId === DEMO_ID) {
+    document.getElementById("demo-mode-banner").style.display = "flex";
+  } else {
+    document.getElementById("demo-mode-banner").style.display = "none";
+  }
 
   updateHUD();
   updateSidebar();
@@ -958,7 +975,7 @@ function renderDemandSpots() {
   (state.urgentSpots||[]).forEach(function(z){ activeZoneIds[z.zone_id]=true; });
   (state.nonurgentSpots||[]).forEach(function(z){ activeZoneIds[z.zone_id]=true; });
 
-  if (state.currentQuarter === 0 || (state.scenario && state.scenario.allow_outsourcing)) {
+  if (state.currentQuarter === 0) {
     (state.revealedZones||[]).forEach(function(z) {
       if (activeZoneIds[z.id]) return; // an active demand dot will cover this zone instead
       var isOutsourced = (state.outsourcedZones||[]).indexOf(z.id) !== -1;
@@ -1026,7 +1043,9 @@ function computeActiveWarehouseSlots() {
 // which zones a warehouse serves.
 function computeZoneAssignments() {
   var active = computeActiveWarehouseSlots();
-  var allSpots = (state.urgentSpots||[]).concat(state.nonurgentSpots||[]);
+  var urgent = (state.urgentSpots||[]).map(function(z){ z.type = "urgent"; return z; });
+  var nonurgent = (state.nonurgentSpots||[]).map(function(z){ z.type = "nonurgent"; return z; });
+  var allSpots = urgent.concat(nonurgent);
   var pairs = [];
   allSpots.forEach(function(z) {
     var isOutsourced = (state.outsourcedZones || []).indexOf(z.zone_id) !== -1;
@@ -1196,6 +1215,35 @@ function showDeliveryOverlay(quarterLabel, animations, resultRef) {
           if (target > 0) lbl.style.color = "var(--red)"; // flag unmet demand clearly
         }
       }, stepTime);
+    });
+
+    // Outsourced zones countdown (point 3: similar count going down is appreciated)
+    var outsourced = state.outsourcedZones || [];
+    var outsourcedZonesWithDemand = [];
+    allSpots.forEach(function(z) {
+      if (outsourced.indexOf(z.zone_id) !== -1) {
+        outsourcedZonesWithDemand.push(z.zone_id);
+      }
+    });
+
+    outsourcedZonesWithDemand.forEach(function(zoneId) {
+      var spot = allSpots.filter(function(z){ return z.zone_id===zoneId; })[0];
+      if (!spot) return;
+      var lbl = mc.querySelector('.demand-label[data-zone-id="'+zoneId+'"]');
+      if (!lbl) return;
+      var target = 0; // outsourced zones are 100% fulfilled instantly
+      var current = spot.orders;
+      var perStep = Math.max(1, Math.round(current / steps));
+      var tick = 0;
+      var timer = setInterval(function(){
+        tick++;
+        current = (tick >= steps) ? target : Math.max(target, current - perStep);
+        lbl.textContent = current.toLocaleString();
+        if (current <= target || tick >= steps) {
+          clearInterval(timer);
+          lbl.style.opacity = "0.45";
+        }
+      }, stepTime);
       timers.push(timer);
     });
 
@@ -1270,26 +1318,72 @@ function fakeDemand() {
   var pool = (sc.demand_zone_positions && sc.demand_zone_positions.length) ? sc.demand_zone_positions : DEMAND_POOL;
   var n    = pool.length;
   var totalSpots    = Math.max(2, Math.floor(n * (0.5 + Math.random()*0.4)));
-  var urgentCount   = Math.max(1, Math.floor(totalSpots * sc.urgent_demand_ratio));
-  var nonurgCount   = Math.max(1, totalSpots - urgentCount);
+
+  var prevUrgent = state.urgentSpots || [];
+  var prevNonurgent = state.nonurgentSpots || [];
 
   function shuffled(arr) { return arr.slice().sort(function(){ return Math.random()-0.5; }); }
-  function makeSpot(p) {
+  function makeSpot(p, type) {
     var orders = sc.demand_min_per_zone + Math.floor(Math.random()*(sc.demand_max_per_zone-sc.demand_min_per_zone));
-    return {zone_id:p.id, x:p.x+(Math.random()-0.5)*2.4, y:p.y+(Math.random()-0.5)*2.4, orders:orders};
+    return {zone_id:p.id, x:p.x+(Math.random()-0.5)*2.4, y:p.y+(Math.random()-0.5)*2.4, orders:orders, type:type};
   }
 
-  // Draw urgent first, then exclude those zone ids before drawing nonurgent,
-  // so the two sets never land on the same base position (mirrors the
-  // backend fix in game_logic.py generate_demand()).
-  var urgentPicks = shuffled(pool).slice(0, urgentCount);
-  var usedIds = {};
-  urgentPicks.forEach(function(p){ usedIds[p.id] = true; });
-  var remainingPool = pool.filter(function(p){ return !usedIds[p.id]; });
-  var nonurgPicks = shuffled(remainingPool).slice(0, Math.min(nonurgCount, remainingPool.length));
+  // Carry forward previously active zones that are in pool (point 1: stays active throughout the game)
+  var activeUrgent = prevUrgent.filter(function(z){
+    return pool.some(function(p){ return p.id === z.zone_id; });
+  }).map(function(z){
+    var prev_orders = z.orders;
+    var new_orders;
+    if (Math.random() < 0.15) {
+      var drop_pct = 0.5 + Math.random() * 0.3; // 50-80% drop
+      new_orders = prev_orders * (1 - drop_pct);
+    } else {
+      var growth_pct = 0.05 + Math.random() * 0.15; // 5-20% growth
+      new_orders = prev_orders * (1 + growth_pct);
+    }
+    z.orders = Math.max(10, Math.min(Math.round(new_orders), sc.demand_max_per_zone || 800));
+    return z;
+  });
 
-  state.urgentSpots    = urgentPicks.map(makeSpot);
-  state.nonurgentSpots = nonurgPicks.map(makeSpot);
+  var activeNonurgent = prevNonurgent.filter(function(z){
+    return pool.some(function(p){ return p.id === z.zone_id; });
+  }).map(function(z){
+    var prev_orders = z.orders;
+    var new_orders;
+    if (Math.random() < 0.15) {
+      var drop_pct = 0.5 + Math.random() * 0.3; // 50-80% drop
+      new_orders = prev_orders * (1 - drop_pct);
+    } else {
+      var growth_pct = 0.05 + Math.random() * 0.15; // 5-20% growth
+      new_orders = prev_orders * (1 + growth_pct);
+    }
+    z.orders = Math.max(10, Math.min(Math.round(new_orders), sc.demand_max_per_zone || 800));
+    return z;
+  });
+
+  var activeIds = {};
+  activeUrgent.forEach(function(z){ activeIds[z.zone_id] = true; });
+  activeNonurgent.forEach(function(z){ activeIds[z.zone_id] = true; });
+
+  var newSpotsNeeded = Math.max(0, totalSpots - (activeUrgent.length + activeNonurgent.length));
+  if (newSpotsNeeded > 0) {
+    var candidates = pool.filter(function(p){ return !activeIds[p.id]; });
+    var newZones = shuffled(candidates).slice(0, newSpotsNeeded);
+    var newUrgentCount = Math.round(newZones.length * sc.urgent_demand_ratio);
+    
+    newZones.forEach(function(p, idx) {
+      var type = (idx < newUrgentCount) ? "urgent" : "nonurgent";
+      var spot = makeSpot(p, type);
+      if (type === "urgent") {
+        activeUrgent.push(spot);
+      } else {
+        activeNonurgent.push(spot);
+      }
+    });
+  }
+
+  state.urgentSpots    = activeUrgent;
+  state.nonurgentSpots = activeNonurgent;
   renderDemandSpots();
   renderRoutes();
 }
@@ -1768,16 +1862,20 @@ function closeWhPanel() {
 /* ── RUN QUARTER ── */
 function runQuarter() {
   var btn = document.getElementById("run-btn");
+  var rSidebar = document.getElementById("results-sidebar");
+  if (rSidebar && rSidebar.classList.contains("show")) {
+    var isLast = state.completed;
+    if (isLast) {
+      dismissResultsSidebar(showGameOver);
+    } else {
+      dismissResultsSidebar(fetchDemand);
+    }
+    return;
+  }
+
   var wasSetup = state.currentQuarter === 0;
   // Close warehouse panel if open
   document.getElementById("wh-panel").classList.remove("open");
-  // Ensure results sidebar is dismissed if still open
-  var rSidebar = document.getElementById("results-sidebar");
-  var rLegend  = document.getElementById("legend-panel");
-  if (rSidebar && rSidebar.classList.contains("show")) {
-    rSidebar.classList.remove("show");
-    if (rLegend) rLegend.style.display = "";
-  }
   btn.disabled = true; btn.textContent = wasSetup ? "Starting..." : "Running...";
 
   var quarterLabel = wasSetup ? 1 : state.currentQuarter;
@@ -2151,6 +2249,7 @@ function dismissResultsSidebar(callback) {
   sidebar.classList.remove("show");
   legend.style.display = "";
   state.outsourcedZones = [];
+  updateHUD();
   if (callback) callback();
 }
 
@@ -2217,8 +2316,7 @@ function showResults(q, r, newlyActivated) {
       +'<div class="r-bar"><div class="r-fill" style="width:'+sp+'%;background:var(--blue)"></div></div></div>';
 
   sidebar.innerHTML =
-    '<button class="rsb-next-btn" onclick="'+btnAction+'">'+btnLabel+'</button>'
-    +'<div class="rsb-body">'
+    '<div class="rsb-body">'
       +'<div class="rsb-title">Q'+q+' Results</div>'
       +'<div class="rsb-sub">Quarter '+q+' of '+state.totalQuarters+' complete</div>'
       +activatedHtml
@@ -2228,6 +2326,7 @@ function showResults(q, r, newlyActivated) {
   // Swap: hide legend, show sidebar
   legend.style.display = "none";
   sidebar.classList.add("show");
+  updateHUD();
 }
 
 
@@ -2450,11 +2549,20 @@ function updateHUD() {
     ? "Setup"
     : "Q"+state.currentQuarter+" / "+state.totalQuarters;
   var runBtn = document.getElementById("run-btn");
+  var rSidebar = document.getElementById("results-sidebar");
+  var isResultsOpen = rSidebar && rSidebar.classList.contains("show");
+  var isLast = state.completed;
+
   if (state.cash < 0) {
     runBtn.disabled = true;
     runBtn.classList.add("debt-blocked");
     runBtn.textContent = "⚠️ Resolve Debt";
     runBtn.setAttribute("title", "Cash is negative. Sell vehicles/warehouses to continue.");
+  } else if (isResultsOpen) {
+    runBtn.disabled = false;
+    runBtn.classList.remove("debt-blocked");
+    runBtn.textContent = isLast ? "See Final Results ➔" : "Start Q" + state.currentQuarter + " ➔";
+    runBtn.removeAttribute("title");
   } else {
     runBtn.disabled = false;
     runBtn.classList.remove("debt-blocked");

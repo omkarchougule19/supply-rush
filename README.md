@@ -2,6 +2,13 @@
 
 A supply chain education game for classroom use.
 
+> [!IMPORTANT]
+> **AI Coding Assistant Guidelines:**
+> This repository is configured with project-scoped rules for AI agents in [.agents/AGENTS.md](.agents/AGENTS.md). 
+> All AI coding assistants must:
+> 1. Read [rules.txt](rules.txt) first before proposing or implementing changes.
+> 2. Document the design decisions and implementation steps under **Section 7 (Development Log)** of [rules.txt](rules.txt).
+
 ## Quick Start (Local)
 
 ```bash

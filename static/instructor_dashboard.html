@@ -114,7 +114,7 @@
 
     /* ── Toggle ── */
     .toggle-row { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
-    .toggle { width: 36px; height: 20px; background: var(--border); border-radius: 20px; position: relative; cursor: pointer; transition: background .2s; }
+    .toggle { width: 36px; height: 20px; background: var(--border); border-radius: 20px; position: relative; cursor: pointer; transition: background .2s; flex-shrink: 0; }
     .toggle.on { background: var(--green); }
     .toggle::after { content:''; position:absolute; top:3px; left:3px; width:14px; height:14px; border-radius:50%; background:#fff; transition: left .2s; }
     .toggle.on::after { left: 19px; }
@@ -138,6 +138,30 @@
     .pl-neg { color:var(--red);   font-weight:600; }
     .sc-badge { display:inline-block; background:#1a2840; color:var(--blue); border-radius:5px; padding:2px 7px; font-size:11px; font-weight:700; letter-spacing:.06em; font-family:'Space Grotesk',sans-serif; }
     .sc-badge.normal { background:#1a1a2e; color:var(--muted); }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(7, 13, 24, 0.85);
+      z-index: 1000; display: flex; align-items: center; justify-content: center;
+      opacity: 0; pointer-events: none; transition: opacity .2s ease;
+    }
+    .modal-overlay.show { opacity: 1; pointer-events: auto; }
+    .modal-content {
+      width: min(94vw, 960px); max-height: 85vh; background: var(--surface);
+      border: 1px solid var(--border); border-radius: 16px; display: flex; flex-direction: column;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.5); overflow: hidden;
+      transform: scale(0.95); transition: transform .2s ease;
+    }
+    .modal-overlay.show .modal-content { transform: scale(1); }
+    .modal-header {
+      padding: 18px 24px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--card);
+    }
+    .modal-header h3 { font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 700; color: var(--accent); }
+    .modal-close { font-size: 24px; color: var(--muted); cursor: pointer; transition: color .15s; }
+    .modal-close:hover { color: var(--text); }
+    .modal-body { padding: 24px; overflow-y: auto; flex: 1; }
 
   </style>
 </head>
@@ -437,6 +461,16 @@
 
 <div id="toast">✓ Copied!</div>
 
+<div id="play-modal" class="modal-overlay">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="modal-play-title">Play Details</h3>
+      <span class="modal-close" onclick="closePlayModal()">&times;</span>
+    </div>
+    <div class="modal-body" id="modal-play-body"></div>
+  </div>
+</div>
+
 <script>
   const API = "/api";
 
@@ -674,7 +708,7 @@
 
       const qBar = `Q${p.current_quarter}/${p.total_quarters}`;
 
-      return `<tr>
+      return `<tr style="cursor:pointer;" onclick="showPlayDetails('${p.play_id}')" title="Click to view detailed play report">
         <td><span class="play-id">${p.play_id}</span></td>
         <td>${p.student_name || '<span style="color:var(--muted)">Anonymous</span>'}</td>
         <td>${scHtml}</td>
@@ -686,6 +720,157 @@
       </tr>`;
     }).join("");
   }
+
+  function fmt(n) { return Math.round(n).toLocaleString(); }
+
+  async function showPlayDetails(playId) {
+    const modal = document.getElementById("play-modal");
+    const body = document.getElementById("modal-play-body");
+    const title = document.getElementById("modal-play-title");
+
+    title.textContent = `Play Details: ${playId}`;
+    body.innerHTML = '<div style="text-align:center;color:var(--muted);padding:40px;">Loading play details…</div>';
+    modal.classList.add("show");
+
+    try {
+      const play = allPlays.filter(p => p.play_id === playId)[0];
+      if (!play) throw new Error("Play not found locally");
+
+      let whHtml = "";
+      try {
+        const whRes = await fetch(`${API}/sessions/${playId}/warehouses`);
+        if (whRes.ok) {
+          const warehouses = await whRes.json();
+          if (warehouses.length > 0) {
+            whHtml = `
+              <div style="margin-top: 24px; margin-bottom: 24px;">
+                <h4 style="font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;color:var(--text);margin-bottom:12px;">Placed Warehouses & Fleet</h4>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));gap:16px;">
+                  ${warehouses.map(w => {
+                    const statusText = w.is_active ? `<span class="status-pill status-active" style="padding:1px 8px;font-size:10px;">Active</span>` 
+                      : `<span class="status-pill status-completed" style="padding:1px 8px;font-size:10px;background:#3b2a1a;color:#ffb86c;">Building (Q${w.quarters_until_active} left)</span>`;
+                    const fleet = Object.keys(w.vehicle_counts).map(t => `${w.vehicle_counts[t]}x ${t}`).join(", ") || "None";
+                    return `
+                      <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;">
+                        <div style="display:flex;align-items:center;justify-content:between;margin-bottom:8px;">
+                          <strong style="text-transform:capitalize;font-size:13px;">${w.warehouse_type} Warehouse (${w.slot_id})</strong>
+                          <div style="margin-left:auto;">${statusText}</div>
+                        </div>
+                        <div style="font-size:12px;color:var(--muted)">Fleet: <span style="color:var(--text);font-weight:500;">${fleet}</span></div>
+                      </div>
+                    `;
+                  }).join("")}
+                </div>
+              </div>
+            `;
+          } else {
+            whHtml = `
+              <div style="margin-top: 24px; margin-bottom: 24px;">
+                <h4 style="font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;color:var(--text);margin-bottom:8px;">Placed Warehouses & Fleet</h4>
+                <p style="font-size:12px;color:var(--muted)">No warehouses placed yet.</p>
+              </div>
+            `;
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load warehouses", e);
+      }
+
+      const results = play.quarterly_results || [];
+      let resultsHtml = "";
+      if (results.length > 0) {
+        resultsHtml = `
+          <h4 style="font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;color:var(--text);margin-top:24px;margin-bottom:12px;">Quarterly Performance History</h4>
+          <div style="overflow-x:auto;">
+            <table class="plays-table" style="min-width: 800px;">
+              <thead>
+                <tr>
+                  <th>Qtr</th>
+                  <th>Revenue</th>
+                  <th>Operating Cost</th>
+                  <th>Profit / Loss</th>
+                  <th>Fulfillment</th>
+                  <th>Veh. Util. (D / T)</th>
+                  <th>Stockouts (U / N)</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${results.map(r => {
+                  const profit = r.profit || 0;
+                  const plText = profit >= 0 ? `+${fmt$(profit)}` : `−${fmt$(Math.abs(profit))}`;
+                  const plClass = profit >= 0 ? "pl-pos" : "pl-neg";
+                  const fillPct = r.orders_total > 0 ? (r.orders_fulfilled / r.orders_total * 100) : 100;
+                  const droneUtil = (r.drone_utilization || 0) * 100;
+                  const truckUtil = (r.truck_utilization || 0) * 100;
+                  const stockoutText = `${r.urgent_stockouts || 0} U / ${r.nonurgent_stockouts || 0} N`;
+
+                  return `
+                    <tr>
+                      <td style="font-weight:600">Q${r.quarter}</td>
+                      <td>${fmt$(r.revenue)}</td>
+                      <td>${fmt$(r.operating_cost)}</td>
+                      <td class="${plClass}" style="font-weight:600">${plText}</td>
+                      <td>${fillPct.toFixed(1)}% <span style="font-size:10px;color:var(--muted)">(${r.orders_fulfilled}/${r.orders_total})</span></td>
+                      <td>${droneUtil.toFixed(0)}% / ${truckUtil.toFixed(0)}%</td>
+                      <td style="color:${(r.urgent_stockouts + r.nonurgent_stockouts > 0) ? "var(--red)" : "var(--muted)"}">${stockoutText}</td>
+                    </tr>
+                  `;
+                }).join("")}
+              </tbody>
+            </table>
+          </div>
+        `;
+      } else {
+        resultsHtml = `
+          <div style="text-align:center;color:var(--muted);padding:40px;border:1px dashed var(--border);border-radius:12px;margin-top:24px;">
+            No simulated quarters yet (Setup Phase Q0).
+          </div>
+        `;
+      }
+
+      body.innerHTML = `
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;display:flex;flex-wrap:wrap;gap:24px;align-items:center;">
+          <div>
+            <label style="display:block;margin-bottom:2px;">Student Name</label>
+            <span style="font-size:15px;font-weight:600;">${play.student_name || 'Anonymous'}</span>
+          </div>
+          <div>
+            <label style="display:block;margin-bottom:2px;">Scenario Mode</label>
+            <span style="font-size:15px;font-weight:600;">${play.scenario_code ? play.scenario_code : 'Normal Play'}</span>
+          </div>
+          <div>
+            <label style="display:block;margin-bottom:2px;">Started At</label>
+            <span style="font-size:15px;font-weight:600;">${fmtDate(play.started_at)}</span>
+          </div>
+          <div>
+            <label style="display:block;margin-bottom:2px;">Current Cash</label>
+            <span style="font-size:15px;font-weight:600;color:var(--accent);">${fmt$(play.cash)}</span>
+          </div>
+          <div>
+            <label style="display:block;margin-bottom:2px;">Status</label>
+            <span style="font-size:15px;font-weight:600;">${play.completed ? 'Completed' : 'In Progress'}</span>
+          </div>
+        </div>
+        ${whHtml}
+        ${resultsHtml}
+      `;
+
+    } catch (e) {
+      body.innerHTML = `<div style="text-align:center;color:var(--red);padding:40px;">Error loading play details: ${e.message}</div>`;
+      console.error(e);
+    }
+  }
+
+  function closePlayModal() {
+    document.getElementById("play-modal").classList.remove("show");
+  }
+
+  window.addEventListener("click", function(e) {
+    const modal = document.getElementById("play-modal");
+    if (e.target === modal) {
+      closePlayModal();
+    }
+  });
 
   async function initPlaysPage() {
     const tbody = document.getElementById("plays-tbody");

@@ -264,6 +264,7 @@ def start_normal_play(payload: NormalModeStart, db: Session = Depends(get_db)):
             name="Default Scenario",
             warehouse_slots=json.dumps(DEFAULT_WAREHOUSE_SLOTS),
             demand_zone_positions=json.dumps(DEFAULT_DEMAND_POSITIONS),
+            allow_outsourcing=True,
         )
         db.add(sc)
         db.commit()
@@ -289,9 +290,10 @@ def start_normal_play(payload: NormalModeStart, db: Session = Depends(get_db)):
         "drone": {"purchase_cost": 9_000,   "operating_cost": 800, "capacity": 60,  "sell_back": 5_400,   "serves_urgent": True,  "serves_nonurgent": True},
     }
 
-    if current_wh_cfg != target_wh_cfg or current_v_cfg != target_v_cfg:
+    if current_wh_cfg != target_wh_cfg or current_v_cfg != target_v_cfg or not sc.allow_outsourcing:
         sc.warehouse_config = json.dumps(target_wh_cfg)
         sc.vehicle_config = json.dumps(target_v_cfg)
+        sc.allow_outsourcing = True
         db.commit()
         db.refresh(sc)
 
@@ -886,8 +888,6 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
         # Advance warehouse builds to the new quarter so they are active for the planning phase
         advance_warehouse_builds(play.warehouses, next_q, wh_cfg)
 
-    # Clear outsourced zones for the next planning quarter
-    play.outsourced_zones = json.dumps([])
     db.commit()
 
     # Return updated warehouse states relative to the next planning quarter (next_q)

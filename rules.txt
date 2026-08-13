@@ -1,0 +1,122 @@
+# Supply Rush — Game Rules & Mechanics
+
+> [!IMPORTANT]
+> **Instructions for AI Assistants:**
+> 1. **Read Rules & Specifications First:** Before making any code changes, analyzing the repository, or executing any tasks, you MUST read the comprehensive game specifications, constants, and rules defined in this file.
+> 2. **Do Not Violate Core Mechanics:** Ensure that no proposed or implemented changes violate any of the established game rules, warehouse/vehicle specifications, service radius logic, or quarter progression loops documented here.
+> 3. **Document Decisions and Thinking:** Any time you implement a new feature, fix a bug, adjust game parameters, or modify code, you MUST document your design decisions, the ideas behind the change, and the exact implementation steps under Section 7 (Development Log) of this file.
+
+## 1. Game Setup & Phases
+* **Starting Cash:** $3,000,000
+* **Total Quarters:** 16 (default)
+* **Quarter 0 (Setup Phase):** 
+  - Time for initial planning and placing warehouses.
+  - Zero active demand is simulated and no delivery animations play.
+  - **Golden Circles (Revealed Zones):** Dash outline markers indicating possible demand zones are visible ONLY in Quarter 0 to assist with initial placement. They do not appear during active play quarters (Q1+).
+
+## 2. Warehouses
+Warehouses have different costs, capacities, build times, and sell-back values:
+
+| Type | Purchase Cost | Capacity (Orders/Qtr) | Build Time | Sell-Back Value |
+|---|---|---|---|---|
+| **Small** | $250,000 | 500 | 1 Quarter | $125,000 |
+| **Medium** | $500,000 | 1,200 | 2 Quarters | $250,000 |
+| **Large** | $800,000 | 2,500 | 4 Quarters | $400,000 |
+
+* **Build Time Rules:** A warehouse built at quarter `B` becomes active and usable at the start of quarter `B + build_time`.
+* **Fleet Capacity Cap:** A warehouse's total fleet capacity (sum of all vehicles parked at it) cannot exceed the warehouse's own capacity rating.
+
+## 3. Fleet Vehicles
+Vehicles handle deliveries from warehouses. Drones are the only vehicles that can deliver urgent orders.
+
+| Type | Purchase Cost | Capacity (Orders/Qtr) | Operating Cost/Qtr | Sell-Back Value | Serves Urgent | Serves Non-Urgent |
+|---|---|---|---|---|---|---|
+| **Truck** | $20,000 | 200 | $800 | $12,000 | No | Yes |
+| **Drone** | $9,000 | 60 | $800 | $5,400 | Yes | Yes |
+
+* **Shared/Flexible Drone Capacity:** Drones serve both urgent and non-urgent orders. Their capacity is shared, not double-counted (e.g. a single drone can deliver 40 urgent and 20 non-urgent orders in a quarter, but not 60 of each).
+
+## 4. Revenues & Third-Party Logistics (3PL) Outsourcing
+* **Fulfillment Revenues:**
+  - **Urgent Order:** $55 per order delivered
+  - **Non-Urgent Order:** $25 per order delivered
+* **Outsourcing Option (3PL):**
+  - Allowed in all modes including the default normal game.
+  - Players can toggle individual demand zones to be outsourced.
+  - **Outsource Costs:** $75 per urgent order, $40 per non-urgent order.
+  - **Outsource Deliveries:** Outsourced orders are 100% fulfilled instantly, completely bypassing warehouse capacity limits and fleet operating expenses.
+
+## 5. Service & Delivery Routing
+* **Service Radius:** A warehouse can only serve demand zones located within its service radius (default: 30 units distance, calculated using Euclidean formula).
+* **Fulfillment Allocation:** 
+  1. Zones are assigned to the nearest active warehouse within the service radius.
+  2. Urgent demand is fulfilled first by drone capacity.
+  3. Non-urgent demand is fulfilled by remaining drone capacity and truck capacity.
+  4. Fulfillments are capped by the warehouse's overall throughput capacity and its parked vehicles' capacities.
+
+## 6. Demand Generation & Evolution
+* **Active Zone Scaling:** The number of active demand zones scales linearly from 50% of eligible zones in Quarter 1 to 100% by the second-to-last quarter.
+* **Eligible Pools:** 50% of the game's selected zones are revealed at Q0. The other 50% unlock progressively during gameplay (starting at Q6).
+* **Demand Evolution (Active Zones):**
+  - **Growth (85% probability):** Demand grows by 5% to 20% compared to the previous quarter.
+  - **Drop (15% probability):** Demand drops by 50% to 80% compared to the previous quarter.
+  - Clamped between a minimum of 10 and a configured maximum (default: 800) orders.
+
+## 7. Development Log: Ideas & Implementation Steps
+
+### Feature: Enabling & Styling Outsourcing (3PL) in Default Mode
+* **Idea:** Students should have access to the Third Party Logistics (3PL) outsourcing option in the default normal game mode. In addition, the toggle switch must be styled correctly so it is visible in the UI, and outsourced zones must stand out on the map using distinctive colors/animations.
+* **Working Steps:**
+  1. **Database / Backend:** Update the `start_normal_play` endpoint in `routes.py` to ensure that `allow_outsourcing` is set to `True` for the default scenario, even if the database already exists.
+  2. **Student Game Config:** Set `allow_outsourcing: true` in the client-side `DEFAULT_SCENARIO` fallback configuration in `game.html`.
+  3. **UI Styling (Toggle Switch):** Add the `.toggle` and `.toggle.on` styling rules to the CSS section in `game.html` so that the switch renders as a green/gray pill with a moving knob.
+  4. **UI Styling (Outsourced Spots):** Add CSS styling and animations (purple dashed borders/pulsing effects) for outsourced zones on the map to make them visually distinct.
+  5. **Instructor Dashboard Modal:** Add the "3PL Cost / Rev" column to the quarterly performance table in the play details modal to let the instructor see outsourcing costs.
+
+### Meta: Guidelines for AI Agents Added to Project
+* **Idea:** Establish a mandatory rule for all incoming AI coding assistants to read the rules and specifications in `rules.txt` first and to document their design decisions directly inside this file's Developer Log.
+* **Working Steps:**
+  1. Add an instructions block at the top of [rules.txt](rules.txt).
+  2. Add/verify instructions in workspace-scoped [.agents/AGENTS.md](.agents/AGENTS.md).
+  3. Log the change in the Developer Log in [rules.txt](rules.txt).
+
+### Bug Fix: Restricting Golden Circles (Revealed Zones) to Setup Phase (Q0)
+* **Idea:** Golden circles (revealed zone outline markers) are intended only for initial planning in Quarter 0 (Setup Phase) to assist with warehouse placement. However, they were still rendering in subsequent play quarters (Q1+) if outsourcing was enabled because of an overly broad condition. We restrict the rendering of revealed zones strictly to Quarter 0.
+* **Working Steps:**
+  1. **Frontend:** Update the condition in `renderDemandSpots()` in [game.html](static/game.html) from `if (state.currentQuarter === 0 || (state.scenario && state.scenario.allow_outsourcing))` to strictly `if (state.currentQuarter === 0)`.
+  2. **Verification:** Confirm that golden circles appear in Quarter 0 and disappear completely from Quarter 1 onward.
+
+### Bug Fix: Restoring Drone and Truck Animations in Offline/Demo Mode
+* **Idea:** The truck and drone delivery animations were failing to play because the computed animations list was empty. This occurred because `fakeDemand` (client-side demo mode fallback) generated demand spots without a `type` property (either `"urgent"` or `"nonurgent"`). As a result, the delivery animation planner could not match vehicles to targets. We fix this by explicitly assigning the `type` property when mapping spots in `fakeDemand`, and additionally adding a defensive fallback in `computeZoneAssignments` to ensure all spots have their types set before calculations.
+* **Working Steps:**
+  1. **Frontend:** Update `makeSpot` and maps in `fakeDemand` in [game.html](static/game.html) to assign the `type` parameter.
+  2. **Frontend:** Add defensive type assignment inside `computeZoneAssignments` in [game.html](static/game.html) so all processed spots are guaranteed to have their correct `type` properties.
+  3. **Verification:** Confirm that trucks and drones animate correctly from active warehouses to their served demand zones during quarter runs.
+
+### Bug Fix: Enabling and Syncing Outsourcing (3PL) Toggle
+* **Idea:** Restore the usability of the outsourcing toggle in the zone panel and prevent desyncs during quarter progressions.
+  1. **Visual Switch:** The `.toggle` CSS rules were missing in [game.html](static/game.html), making the switch invisible and unclickable. We add these rules to the styles section.
+  2. **Quarter Progression Sync:** When the simulation runs, the database clears outsourced zones for the next quarter, but the frontend was not resetting `state.outsourcedZones`. We clear `state.outsourcedZones` on the client when entering a new quarter so the UI does not show stale selections.
+* **Working Steps:**
+  1. **Frontend:** Add `.toggle` and `.toggle.on` styling rules (including the slide knob layout) to the CSS section in [game.html](static/game.html).
+  2. **Frontend:** Add `state.outsourcedZones = [];` inside the client-side `done(result)` function in [game.html](static/game.html) to reset outsourcing choices at the start of each new quarter.
+  3. **Verification:** Verify that the outsourcing toggle renders as a clean switch, correctly marks zones as outsourced on toggle, resolves orders via outsourcing, and resets on quarter advancement.
+
+### Feature: Permanent Active Zones, Persistent Outsourcing, and Outsourced Countdown Animation
+* **Idea:**
+  1. **Permanent Active Zones:** Once a demand zone becomes active, it should stay active throughout the game. We implement this in the client-side `fakeDemand` (demo mode fallback) by carrying forward previously active zones and evolving their demand, matching the backend's behavior.
+  2. **Persistent Outsourcing:** Outsourced zones should stay outsourced across quarters until explicitly toggled off by the player. We remove the reset logic from both the backend (`routes.py`) and the frontend (`game.html` `done()`).
+  3. **Outsourced Zones Countdown:** During delivery animations, outsourced zones should visually count down their orders to `0` matching the active normal zones to provide a cohesive visual experience.
+* **Working Steps:**
+  1. **Backend:** Remove `play.outsourced_zones = json.dumps([])` in the `/advance` endpoint of [routes.py](routes.py).
+  2. **Frontend:** Remove `state.outsourcedZones = [];` from `done(result)` in [game.html](static/game.html).
+  3. **Frontend:** Update `fakeDemand()` in [game.html](static/game.html) to carry forward previous urgent/nonurgent active spots and evolve their order count.
+  4. **Frontend:** Update `showDeliveryOverlay` in [game.html](static/game.html) to locate outsourced zones and animate their labels counting down to 0 during the delivery phase.
+  5. **Verification:** Run game session to verify persistent active zones, persistent outsourcing toggles, and countdowns.### Bug Fix & Quality of Life: Production Database Robustness and Offline Warning Banner
+* **Idea:**
+  1. **Backend Robustness:** Ensure database operational issues (e.g. Postgres host down on boot, database connection drop) do not crash the FastAPI server startup. Handle connection issues gracefully by returning JSON 503/500 service messages rather than raw stack traces.
+  2. **Frontend Offline Banner:** When the frontend fails to reach the backend, it falls back to client-side offline demo mode (`DEMO_ID`). Display a prominent yellow warning banner warning students that their progress is NOT being saved to the database.
+* **Working Steps:**
+  1. **Backend (`main.py`):** Wrapped table creation and migration executions in a try-except block to prevent boot crashes. Added exception handlers for SQLAlchemy `OperationalError` and `DBAPIError`.
+  2. **Frontend (`game.html`):** Added a `#demo-mode-banner` warning block and displayed it when `state.playId === DEMO_ID`.
+  3. **Verification:** Verified compilation and startup resilience.
