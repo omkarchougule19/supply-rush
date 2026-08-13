@@ -35,6 +35,7 @@ Vehicles handle deliveries from warehouses. Drones are the only vehicles that ca
 | **Drone** | $9,000 | 60 | $800 | $5,400 | Yes | Yes |
 
 * **Shared/Flexible Drone Capacity:** Drones serve both urgent and non-urgent orders. Their capacity is shared, not double-counted (e.g. a single drone can deliver 40 urgent and 20 non-urgent orders in a quarter, but not 60 of each).
+* **Same-Quarter Relocations vs. Depreciation**: Normally, if a player buys and sells a vehicle of the same type within the same quarter, the transaction is netted to $0 (representing a free relocation of assets between warehouses). If the instructor turns ON the **"Allowing moving trucks & drones"** toggle in the scenario configurations, same-quarter netting is disabled, and players will face the full depreciation penalty (paying full purchase cost and receiving only sell-back credit) for every purchase/sale transaction.
 
 ## 4. Revenues & Third-Party Logistics (3PL) Outsourcing
 * **Fulfillment Revenues:**
@@ -43,8 +44,9 @@ Vehicles handle deliveries from warehouses. Drones are the only vehicles that ca
 * **Outsourcing Option (3PL):**
   - Allowed in all modes including the default normal game.
   - Players can toggle individual demand zones to be outsourced.
-  - **Outsource Costs:** $75 per urgent order, $40 per non-urgent order.
+  - **Outsource Costs:** $75 per urgent order, $40 per non-urgent order (or custom rates set in scenario configs).
   - **Outsource Deliveries:** Outsourced orders are 100% fulfilled instantly, completely bypassing warehouse capacity limits and fleet operating expenses.
+  - **Persistence & Remaining Demand**: Outsourced zones remain outsourced across quarters until toggled off. Since they are 100% fulfilled instantly, they always end a quarter run with exactly `0` remaining demand.
 
 ## 5. Service & Delivery Routing
 * **Service Radius:** A warehouse can only serve demand zones located within its service radius (default: 30 units distance, calculated using Euclidean formula).
