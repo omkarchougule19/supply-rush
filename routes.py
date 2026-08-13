@@ -152,7 +152,6 @@ def update_scenario(code: str, payload: ScenarioUpdate, db: Session = Depends(ge
     if payload.allow_sell_trucks     is not None: sc.allow_sell_trucks     = payload.allow_sell_trucks
     if payload.allow_sell_drones     is not None: sc.allow_sell_drones     = payload.allow_sell_drones
     if payload.allow_moving_vehicles is not None: sc.allow_moving_vehicles = payload.allow_moving_vehicles
-    if sc.allow_moving_vehicles is None: sc.allow_moving_vehicles = False
     if payload.warehouse_slots is not None:
         wh_slots = [s.dict() for s in payload.warehouse_slots]
         if not wh_slots:
