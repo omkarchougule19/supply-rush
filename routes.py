@@ -2,31 +2,49 @@
 routes.py — All API endpoints for Supply Rush
 """
 
+import os
 import json
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, selectinload
 
 from database import get_db
-from models import Scenario, Play, PlacedWarehouse, QuarterResult
+from models import (
+    Scenario, Play, PlacedWarehouse, QuarterResult, PlayMember,
+    DEFAULT_WAREHOUSE_CONFIG, DEFAULT_VEHICLE_CONFIG,
+)
 from schemas import (
     ScenarioCreate, ScenarioUpdate, ScenarioOut,
     PlayCreate, NormalModeStart,
     PlaceWarehouseRequest, AddVehicleRequest,
     SellWarehouseRequest, SellVehicleRequest,
     QuarterResultOut, OutsourceZoneRequest,
+    EmailCodeRequest, EmailCodeVerify,
 )
 from game_logic import (
     generate_code, generate_play_id,
     generate_demand, simulate_quarter,
     advance_warehouse_builds, quarters_until_active,
-    count_vehicles, compute_pending_vehicle_net_cost, get_assigned_vehicle_capacity,
+    count_vehicles, compute_pending_vehicle_net_cost, compute_vehicle_capex, get_assigned_vehicle_capacity,
     select_and_schedule_demand_zones, get_revealed_zones,
+    roll_disruption_events, compute_disruption_modifiers, events_affecting_play,
     DEFAULT_WAREHOUSE_SLOTS, DEFAULT_DEMAND_POSITIONS,
+)
+from auth import (
+    authenticate_instructor, require_student_email, verification_required,
+    set_session_cookie, clear_session_cookie, get_session_email,
+    is_allowed_email, allowed_email_domain,
+    create_verification_code, verify_code,
 )
 
 router = APIRouter()
 DEFAULT_SCENARIO_CODE = "DEFAULT"
+try:
+    MAX_GROUP_SIZE = int(os.getenv("MAX_GROUP_SIZE", "60"))
+except (TypeError, ValueError):
+    MAX_GROUP_SIZE = 60
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -39,11 +57,60 @@ def _get_scenario_or_404(code: str, db: Session) -> Scenario:
     return sc
 
 
-def _get_play_or_404(play_id: str, db: Session) -> Play:
-    play = db.query(Play).filter(Play.play_id == play_id).first()
+def _get_play_or_404(play_id: str, db: Session, for_update: bool = False) -> Play:
+    """
+    for_update=True locks the row for the rest of this transaction — used by
+    every endpoint that reads-then-writes play.cash or inserts a PlacedWarehouse
+    tied to a slot, so two group members acting at the same moment (a real
+    scenario now that a play can be shared by a whole group) serialize instead
+    of racing past a lost cash update or a duplicate warehouse on one slot.
+    No-op on SQLite (no row-level locking there, and SQLite is single-writer
+    anyway); matters under multi-worker Postgres deployments.
+    """
+    q = db.query(Play).filter(Play.play_id == play_id)
+    if for_update:
+        q = q.with_for_update()
+    play = q.first()
     if not play:
         raise HTTPException(404, "Play not found")
     return play
+
+
+def _is_member(db: Session, play: Play, email: str) -> bool:
+    return db.query(PlayMember).filter(
+        PlayMember.play_id_fk == play.id, PlayMember.email == email
+    ).first() is not None
+
+
+def _ensure_member(db: Session, play: Play, email: str) -> None:
+    """
+    Adds `email` to this play's group membership if not already a member,
+    enforcing MAX_GROUP_SIZE. No-op entirely when student verification is
+    off, so membership tracking never blocks anything in local dev.
+    """
+    if not verification_required():
+        return
+    if _is_member(db, play, email):
+        return
+    # Lock the play row for the rest of this transaction so concurrent joins
+    # against the same play serialize instead of racing past MAX_GROUP_SIZE.
+    _get_play_or_404(play.play_id, db, for_update=True)
+    if _is_member(db, play, email):
+        return
+    count = db.query(PlayMember).filter(PlayMember.play_id_fk == play.id).count()
+    if count >= MAX_GROUP_SIZE:
+        db.rollback()
+        raise HTTPException(400, f"This group is full (max {MAX_GROUP_SIZE} students).")
+    db.add(PlayMember(play_id_fk=play.id, email=email))
+    db.commit()
+
+
+def _require_member(db: Session, play: Play, email: str) -> None:
+    """Rejects the request unless `email` already belongs to this play's group."""
+    if not verification_required():
+        return
+    if not _is_member(db, play, email):
+        raise HTTPException(403, "You're not a member of this play.")
 
 
 def _parse_scenario(sc: Scenario) -> ScenarioOut:
@@ -67,14 +134,55 @@ def _play_response(play: Play, sc: Scenario) -> dict:
         "completed":       play.completed,
         "quarterly_results": json.loads(play.quarterly_results or "[]"),
         "outsourced_zones":  json.loads(play.outsourced_zones or "[]"),
+        "start_capex": {
+            "warehouses": getattr(play, "setup_capex_warehouses", 0.0) or 0.0,
+            "vehicles":   getattr(play, "setup_capex_vehicles", 0.0) or 0.0,
+        },
         "scenario":        _parse_scenario(sc) if sc else None,
     }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  AUTH — passwordless student email verification
+# ─────────────────────────────────────────────────────────────────────────────
+@router.post("/auth/request-code", tags=["auth"])
+def request_code(payload: EmailCodeRequest, db: Session = Depends(get_db)):
+    """Sends a 6-digit verification code to a school email address."""
+    email = payload.email.strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(400, "Please enter a valid email address.")
+    if not is_allowed_email(email):
+        raise HTTPException(400, f"Only @{allowed_email_domain()} email addresses are accepted.")
+    create_verification_code(db, email)
+    return {"detail": "Verification code sent.", "email": email}
+
+
+@router.post("/auth/verify-code", tags=["auth"])
+def verify_code_endpoint(payload: EmailCodeVerify, response: Response, db: Session = Depends(get_db)):
+    """Checks the code and, on success, sets a signed session cookie."""
+    email = payload.email.strip().lower()
+    if not verify_code(db, email, payload.code.strip()):
+        raise HTTPException(400, "Invalid or expired code.")
+    set_session_cookie(response, email)
+    return {"email": email}
+
+
+@router.get("/auth/me", tags=["auth"])
+def auth_me(request: Request):
+    """Lets the frontend check verification status without triggering a 401."""
+    return {"email": get_session_email(request), "verification_required": verification_required()}
+
+
+@router.post("/auth/logout", tags=["auth"])
+def logout(response: Response):
+    clear_session_cookie(response)
+    return {"detail": "Logged out"}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  INSTRUCTOR — Scenario management
 # ─────────────────────────────────────────────────────────────────────────────
-@router.post("/scenarios", response_model=ScenarioOut, tags=["instructor"])
+@router.post("/scenarios", response_model=ScenarioOut, tags=["instructor"], dependencies=[Depends(authenticate_instructor)])
 def create_scenario(payload: ScenarioCreate, db: Session = Depends(get_db)):
     """Instructor creates a scenario. Returns the unique code to share with students."""
     code = generate_code()
@@ -110,8 +218,10 @@ def create_scenario(payload: ScenarioCreate, db: Session = Depends(get_db)):
         outsource_cost_urgent=payload.outsource_cost_urgent,
         outsource_cost_nonurgent=payload.outsource_cost_nonurgent,
         allow_moving_vehicles=payload.allow_moving_vehicles,
+        unlocked_quarter=payload.unlocked_quarter,
         warehouse_slots=json.dumps(wh_slots),
         demand_zone_positions=json.dumps(demand_zones),
+        disruption_config=json.dumps(payload.disruption_config.dict()),
     )
     db.add(sc)
     db.commit()
@@ -119,7 +229,7 @@ def create_scenario(payload: ScenarioCreate, db: Session = Depends(get_db)):
     return _parse_scenario(sc)
 
 
-@router.get("/scenarios", response_model=List[ScenarioOut], tags=["instructor"])
+@router.get("/scenarios", response_model=List[ScenarioOut], tags=["instructor"], dependencies=[Depends(authenticate_instructor)])
 def list_scenarios(db: Session = Depends(get_db)):
     """Instructor view: list all saved scenarios."""
     scenarios = db.query(Scenario).all()
@@ -128,10 +238,15 @@ def list_scenarios(db: Session = Depends(get_db)):
 
 @router.get("/scenarios/{code}", response_model=ScenarioOut, tags=["instructor"])
 def get_scenario(code: str, db: Session = Depends(get_db)):
+    # Deliberately NOT instructor-gated: students already receive this same
+    # data via _play_response() once they know a scenario code, and the
+    # quarter-gating status poll (game.html refreshGateStatus) depends on
+    # this endpoint staying reachable without credentials. Listing ALL codes
+    # (list_scenarios above) is the sensitive operation, not looking one up.
     return _parse_scenario(_get_scenario_or_404(code, db))
 
 
-@router.put("/scenarios/{code}", response_model=ScenarioOut, tags=["instructor"])
+@router.put("/scenarios/{code}", response_model=ScenarioOut, tags=["instructor"], dependencies=[Depends(authenticate_instructor)])
 def update_scenario(code: str, payload: ScenarioUpdate, db: Session = Depends(get_db)):
     sc = _get_scenario_or_404(code, db)
     if payload.name            is not None: sc.name            = payload.name
@@ -152,6 +267,7 @@ def update_scenario(code: str, payload: ScenarioUpdate, db: Session = Depends(ge
     if payload.allow_sell_trucks     is not None: sc.allow_sell_trucks     = payload.allow_sell_trucks
     if payload.allow_sell_drones     is not None: sc.allow_sell_drones     = payload.allow_sell_drones
     if payload.allow_moving_vehicles is not None: sc.allow_moving_vehicles = payload.allow_moving_vehicles
+    if payload.unlocked_quarter is not None: sc.unlocked_quarter = payload.unlocked_quarter
     if payload.warehouse_slots is not None:
         wh_slots = [s.dict() for s in payload.warehouse_slots]
         if not wh_slots:
@@ -163,12 +279,23 @@ def update_scenario(code: str, payload: ScenarioUpdate, db: Session = Depends(ge
         if not demand_zones:
             demand_zones = DEFAULT_DEMAND_POSITIONS
         sc.demand_zone_positions = json.dumps(demand_zones)
+    if payload.disruption_config is not None:
+        sc.disruption_config = json.dumps(payload.disruption_config.dict())
+
+    # Only enforce this when the request actually touched one of the two
+    # fields — otherwise an unrelated PUT (e.g. just toggling unlocked_quarter)
+    # against a pre-existing scenario row would 400 forever if it happens to
+    # already be in this state, with no dashboard control able to fix it.
+    demand_fields_touched = payload.demand_min_per_zone is not None or payload.demand_max_per_zone is not None
+    if demand_fields_touched and sc.demand_max_per_zone < sc.demand_min_per_zone:
+        raise HTTPException(400, "demand_max_per_zone must be >= demand_min_per_zone")
+
     db.commit()
     db.refresh(sc)
     return _parse_scenario(sc)
 
 
-@router.delete("/scenarios/{code}", tags=["instructor"])
+@router.delete("/scenarios/{code}", tags=["instructor"], dependencies=[Depends(authenticate_instructor)])
 def delete_scenario(code: str, db: Session = Depends(get_db)):
     sc = _get_scenario_or_404(code, db)
     plays = db.query(Play).filter(Play.scenario_id == sc.id).all()
@@ -176,6 +303,7 @@ def delete_scenario(code: str, db: Session = Depends(get_db)):
     if play_ids:
         db.query(QuarterResult).filter(QuarterResult.play_id_fk.in_(play_ids)).delete(synchronize_session=False)
         db.query(PlacedWarehouse).filter(PlacedWarehouse.play_id_fk.in_(play_ids)).delete(synchronize_session=False)
+        db.query(PlayMember).filter(PlayMember.play_id_fk.in_(play_ids)).delete(synchronize_session=False)
         db.query(Play).filter(Play.id.in_(play_ids)).delete(synchronize_session=False)
     db.delete(sc)
     db.commit()
@@ -185,7 +313,7 @@ def delete_scenario(code: str, db: Session = Depends(get_db)):
 # ─────────────────────────────────────────────────────────────────────────────
 #  INSTRUCTOR — Plays view (ALL plays across ALL scenarios)
 # ─────────────────────────────────────────────────────────────────────────────
-@router.get("/plays", tags=["instructor"])
+@router.get("/plays", tags=["instructor"], dependencies=[Depends(authenticate_instructor)])
 def list_all_plays(
     db: Session = Depends(get_db),
     search: Optional[str] = Query(None, description="Filter by student name or scenario code"),
@@ -196,7 +324,7 @@ def list_all_plays(
     Instructor view: all plays across all scenarios.
     Supports search by student name or scenario code, and filters by completed status.
     """
-    q = db.query(Play)
+    q = db.query(Play).options(selectinload(Play.members), selectinload(Play.scenario))
 
     if scenario_code:
         q = q.filter(Play.scenario_code == scenario_code.upper())
@@ -217,6 +345,8 @@ def list_all_plays(
             "play_id":         p.play_id,
             "scenario_code":   p.scenario_code,
             "student_name":    p.student_name,
+            "group_name":      p.group_name,
+            "member_emails":   [m.email for m in p.members],
             "started_at":      p.started_at,
             "current_quarter": p.current_quarter,
             "total_quarters":  p.scenario.total_quarters if p.scenario else 16,
@@ -232,9 +362,34 @@ def list_all_plays(
 #  STUDENT — Start a play
 # ─────────────────────────────────────────────────────────────────────────────
 @router.post("/sessions", tags=["student"])
-def start_play(payload: PlayCreate, db: Session = Depends(get_db)):
-    """Student enters a scenario code → creates a new play."""
+def start_play(payload: PlayCreate, db: Session = Depends(get_db), email: str = Depends(require_student_email)):
+    """
+    Student enters a scenario code (+ group name, required once student
+    verification is on) → joins the group's existing play if one already
+    exists for this scenario, otherwise creates one. This is the ONLY
+    mechanism for multiple students to land in the same shared play — there
+    is no separate join-by-link flow, so every group member calls this same
+    endpoint with the same (scenario_code, group_name) pair.
+    """
     sc = _get_scenario_or_404(payload.scenario_code.upper(), db)
+    group_name = (payload.group_name or "").strip()
+
+    if verification_required() and not group_name:
+        raise HTTPException(400, "Please enter a group name.")
+
+    play = None
+    if group_name:
+        play = (
+            db.query(Play)
+            .filter(Play.scenario_id == sc.id, Play.completed == False)
+            .filter(func.lower(Play.group_name) == group_name.lower())
+            .first()
+        )
+
+    if play:
+        _ensure_member(db, play, email)
+        return _play_response(play, sc)
+
     pid = generate_play_id()
     master_zones = json.loads(sc.demand_zone_positions or "[]")
     schedule = select_and_schedule_demand_zones(
@@ -245,6 +400,7 @@ def start_play(payload: PlayCreate, db: Session = Depends(get_db)):
         scenario_code=sc.code,
         scenario_id=sc.id,
         student_name=payload.student_name,
+        group_name=group_name or None,
         current_quarter=0,   # Quarter 0 = setup phase, no demand/simulation
         cash=sc.starting_budget,
         quarterly_results=json.dumps([]),
@@ -253,14 +409,31 @@ def start_play(payload: PlayCreate, db: Session = Depends(get_db)):
         pending_vehicle_deltas=json.dumps({}),
     )
     db.add(play)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Another request for the same (scenario, group_name) committed first
+        # (the partial unique index on plays closes this race) — join the
+        # play that won instead of failing the request.
+        db.rollback()
+        play = (
+            db.query(Play)
+            .filter(Play.scenario_id == sc.id, Play.completed == False)
+            .filter(func.lower(Play.group_name) == group_name.lower())
+            .first()
+        )
+        if not play:
+            raise
+        _ensure_member(db, play, email)
+        return _play_response(play, sc)
     db.refresh(play)
+    _ensure_member(db, play, email)
     return _play_response(play, sc)
 
 
 @router.post("/sessions/normal", tags=["student"])
-def start_normal_play(payload: NormalModeStart, db: Session = Depends(get_db)):
-    """Normal mode: no code. Uses DEFAULT scenario (auto-created with real positions if missing)."""
+def start_normal_play(payload: NormalModeStart, db: Session = Depends(get_db), email: str = Depends(require_student_email)):
+    """Normal mode: no code, no groups — always a fresh solo play. Uses DEFAULT scenario (auto-created with real positions if missing)."""
     sc = db.query(Scenario).filter(Scenario.code == DEFAULT_SCENARIO_CODE).first()
     if not sc:
         sc = Scenario(
@@ -273,10 +446,39 @@ def start_normal_play(payload: NormalModeStart, db: Session = Depends(get_db)):
         db.add(sc)
         db.commit()
         db.refresh(sc)
-    # If DEFAULT exists but has empty slots (legacy), backfill
-    if sc.warehouse_slots == json.dumps([]) or sc.warehouse_slots == "[]":
-        sc.warehouse_slots       = json.dumps(DEFAULT_WAREHOUSE_SLOTS)
-        sc.demand_zone_positions = json.dumps(DEFAULT_DEMAND_POSITIONS)
+    # If DEFAULT exists but has empty slots (legacy), different slot counts, or outdated coordinates, update/backfill
+    try:
+        existing_slots = json.loads(sc.warehouse_slots or "[]")
+    except Exception:
+        existing_slots = []
+
+    try:
+        existing_demand = json.loads(sc.demand_zone_positions or "[]")
+    except Exception:
+        existing_demand = []
+
+    # Only backfill truly-empty legacy rows here. Overwriting whenever the
+    # constants merely differ would rewrite slot ids out from under any
+    # in-progress play (a placed warehouse's slot_id would stop resolving
+    # in advance_quarter's coordinate lookup, silently zeroing its position).
+    dirty = False
+    if not existing_slots:
+        sc.warehouse_slots = json.dumps(DEFAULT_WAREHOUSE_SLOTS)
+        dirty = True
+
+    # Demand zones are safe to backfill additively (unlike slots, above) —
+    # DEFAULT_DEMAND_POSITIONS only ever grows by appending new ids with new
+    # coordinates; existing ids keep their original x/y forever, so merging
+    # in newly-added ids can't shift what an in-progress play's already-
+    # scheduled zone_ids point to.
+    existing_ids = {z["id"] for z in existing_demand}
+    missing = [z for z in DEFAULT_DEMAND_POSITIONS if z["id"] not in existing_ids]
+    if missing:
+        existing_demand = existing_demand + missing
+        sc.demand_zone_positions = json.dumps(existing_demand)
+        dirty = True
+
+    if dirty:
         db.commit()
         db.refresh(sc)
 
@@ -284,15 +486,8 @@ def start_normal_play(payload: NormalModeStart, db: Session = Depends(get_db)):
     current_wh_cfg = json.loads(sc.warehouse_config or "{}")
     current_v_cfg = json.loads(sc.vehicle_config or "{}")
 
-    target_wh_cfg = {
-        "small":  {"purchase_cost": 250_000, "capacity": 500,  "build_quarters": 1, "sell_back": 125_000},
-        "medium": {"purchase_cost": 500_000, "capacity": 1200, "build_quarters": 2, "sell_back": 250_000},
-        "large":  {"purchase_cost": 800_000, "capacity": 2500, "build_quarters": 4, "sell_back": 400_000},
-    }
-    target_v_cfg = {
-        "truck": {"purchase_cost": 20_000,  "operating_cost": 800, "capacity": 200, "sell_back": 12_000,  "serves_urgent": False, "serves_nonurgent": True},
-        "drone": {"purchase_cost": 9_000,   "operating_cost": 800, "capacity": 60,  "sell_back": 5_400,   "serves_urgent": True,  "serves_nonurgent": True},
-    }
+    target_wh_cfg = DEFAULT_WAREHOUSE_CONFIG
+    target_v_cfg = DEFAULT_VEHICLE_CONFIG
 
     if current_wh_cfg != target_wh_cfg or current_v_cfg != target_v_cfg or not sc.allow_outsourcing:
         sc.warehouse_config = json.dumps(target_wh_cfg)
@@ -321,19 +516,22 @@ def start_normal_play(payload: NormalModeStart, db: Session = Depends(get_db)):
     db.add(play)
     db.commit()
     db.refresh(play)
+    _ensure_member(db, play, email)
     return _play_response(play, sc)
 
 
 @router.get("/sessions/{play_id}", tags=["student"])
-def get_play(play_id: str, db: Session = Depends(get_db)):
+def get_play(play_id: str, db: Session = Depends(get_db), email: str = Depends(require_student_email)):
     """Fetch current play state (for page refresh / reconnect)."""
     play = _get_play_or_404(play_id, db)
+    _require_member(db, play, email)
     return _play_response(play, play.scenario)
 
 
 @router.post("/sessions/{play_id}/outsource", tags=["student"])
-def toggle_outsource_zone(play_id: str, payload: OutsourceZoneRequest, db: Session = Depends(get_db)):
-    play = _get_play_or_404(play_id, db)
+def toggle_outsource_zone(play_id: str, payload: OutsourceZoneRequest, db: Session = Depends(get_db), email: str = Depends(require_student_email)):
+    play = _get_play_or_404(play_id, db, for_update=True)
+    _require_member(db, play, email)
     if play.completed:
         raise HTTPException(400, "Game is already complete")
     sc = play.scenario
@@ -360,8 +558,9 @@ def toggle_outsource_zone(play_id: str, payload: OutsourceZoneRequest, db: Sessi
 #  STUDENT — Warehouse & vehicle actions
 # ─────────────────────────────────────────────────────────────────────────────
 @router.post("/sessions/{play_id}/warehouses", tags=["student"])
-def place_warehouse(play_id: str, payload: PlaceWarehouseRequest, db: Session = Depends(get_db)):
-    play = _get_play_or_404(play_id, db)
+def place_warehouse(play_id: str, payload: PlaceWarehouseRequest, db: Session = Depends(get_db), email: str = Depends(require_student_email)):
+    play = _get_play_or_404(play_id, db, for_update=True)
+    _require_member(db, play, email)
     if play.completed:
         raise HTTPException(400, "Game is already complete")
 
@@ -371,9 +570,15 @@ def place_warehouse(play_id: str, payload: PlaceWarehouseRequest, db: Session = 
     if not cfg:
         raise HTTPException(400, f"Unknown warehouse type: {payload.warehouse_type}")
 
+    valid_slot_ids = {slot["id"] for slot in json.loads(sc.warehouse_slots or "[]")}
+    if payload.slot_id not in valid_slot_ids:
+        raise HTTPException(400, f"Unknown slot: {payload.slot_id}")
+
     v_cfg = json.loads(sc.vehicle_config or "{}")
     deltas = json.loads(play.pending_vehicle_deltas or "{}")
-    pending_net_cost = compute_pending_vehicle_net_cost(deltas, v_cfg)
+    pending_net_cost = compute_pending_vehicle_net_cost(
+        deltas, v_cfg, allow_moving_vehicles=getattr(sc, "allow_moving_vehicles", False)
+    )
     cost = cfg["purchase_cost"]
     
     if play.cash - pending_net_cost < cost:
@@ -398,6 +603,7 @@ def place_warehouse(play_id: str, payload: PlaceWarehouseRequest, db: Session = 
         warehouse_type=payload.warehouse_type,
         built_at_quarter=play.current_quarter,
         is_active=cfg["build_quarters"] == 0,
+        purchase_price_paid=cost,
     )
     db.add(wh)
     db.commit()
@@ -421,8 +627,11 @@ def place_warehouse(play_id: str, payload: PlaceWarehouseRequest, db: Session = 
 
 
 @router.post("/sessions/{play_id}/vehicles", tags=["student"])
-def add_vehicle(play_id: str, payload: AddVehicleRequest, db: Session = Depends(get_db)):
-    play = _get_play_or_404(play_id, db)
+def add_vehicle(play_id: str, payload: AddVehicleRequest, db: Session = Depends(get_db), email: str = Depends(require_student_email)):
+    play = _get_play_or_404(play_id, db, for_update=True)
+    _require_member(db, play, email)
+    if play.completed:
+        raise HTTPException(400, "Game is already complete")
     wh = db.query(PlacedWarehouse).filter(
         PlacedWarehouse.id == payload.warehouse_id,
         PlacedWarehouse.play_id_fk == play.id,
@@ -484,8 +693,11 @@ def add_vehicle(play_id: str, payload: AddVehicleRequest, db: Session = Depends(
 
 
 @router.post("/sessions/{play_id}/warehouses/sell", tags=["student"])
-def sell_warehouse(play_id: str, payload: SellWarehouseRequest, db: Session = Depends(get_db)):
-    play = _get_play_or_404(play_id, db)
+def sell_warehouse(play_id: str, payload: SellWarehouseRequest, db: Session = Depends(get_db), email: str = Depends(require_student_email)):
+    play = _get_play_or_404(play_id, db, for_update=True)
+    _require_member(db, play, email)
+    if play.completed:
+        raise HTTPException(400, "Game is already complete")
     wh = db.query(PlacedWarehouse).filter(
         PlacedWarehouse.id == payload.warehouse_id,
         PlacedWarehouse.play_id_fk == play.id,
@@ -528,8 +740,11 @@ def sell_warehouse(play_id: str, payload: SellWarehouseRequest, db: Session = De
 
 
 @router.post("/sessions/{play_id}/vehicles/sell", tags=["student"])
-def sell_vehicle(play_id: str, payload: SellVehicleRequest, db: Session = Depends(get_db)):
-    play = _get_play_or_404(play_id, db)
+def sell_vehicle(play_id: str, payload: SellVehicleRequest, db: Session = Depends(get_db), email: str = Depends(require_student_email)):
+    play = _get_play_or_404(play_id, db, for_update=True)
+    _require_member(db, play, email)
+    if play.completed:
+        raise HTTPException(400, "Game is already complete")
     wh = db.query(PlacedWarehouse).filter(
         PlacedWarehouse.id == payload.warehouse_id,
         PlacedWarehouse.play_id_fk == play.id,
@@ -582,8 +797,9 @@ def sell_vehicle(play_id: str, payload: SellVehicleRequest, db: Session = Depend
     }
 
 
-@router.get("/sessions/{play_id}/warehouses", tags=["student"])
+@router.get("/sessions/{play_id}/warehouses", tags=["instructor"], dependencies=[Depends(authenticate_instructor)])
 def get_warehouses(play_id: str, db: Session = Depends(get_db)):
+    """Instructor-only: used by the play-details modal in the dashboard (not called by the student game)."""
     play = _get_play_or_404(play_id, db)
     sc   = play.scenario
     wh_cfg = json.loads(sc.warehouse_config or "{}")
@@ -609,7 +825,7 @@ def get_warehouses(play_id: str, db: Session = Depends(get_db)):
 #  STUDENT — Quarter flow
 # ─────────────────────────────────────────────────────────────────────────────
 @router.get("/sessions/{play_id}/demand", tags=["student"])
-def get_demand(play_id: str, db: Session = Depends(get_db)):
+def get_demand(play_id: str, db: Session = Depends(get_db), email: str = Depends(require_student_email)):
     """
     Generate demand for the current quarter, restricted to this play's fixed
     zone schedule (zones already revealed as of the current quarter).
@@ -625,10 +841,12 @@ def get_demand(play_id: str, db: Session = Depends(get_db)):
     Seeded by (play.id * 100 + quarter) for reproducibility.
     """
     play = _get_play_or_404(play_id, db)
+    _require_member(db, play, email)
     sc   = play.scenario
     schedule = json.loads(play.demand_zone_schedule or '[]')
     revealed = get_revealed_zones(schedule, play.current_quarter)
 
+    disruption_events = []
     if play.current_quarter == 0:
         demand = {"urgent": [], "nonurgent": []}
     else:
@@ -645,17 +863,41 @@ def get_demand(play_id: str, db: Session = Depends(get_db)):
             total_quarters=sc.total_quarters,
             seed=seed,
         )
-    return {"quarter": play.current_quarter, "demand_zones": demand, "revealed_zones": revealed}
+        # Forecast: same roll every play under this scenario code will see for
+        # this quarter (seeded off scenario_id, not play.id) — shown ahead of
+        # Run Quarter so it's an actionable warning, not a post-hoc surprise.
+        all_events = roll_disruption_events(
+            json.loads(sc.disruption_config or "{}"), sc.id, play.current_quarter,
+            [s["id"] for s in json.loads(sc.warehouse_slots or "[]")],
+        )
+        disruption_events = [
+            {"message": ev["message"], "kind": ev["kind"]}
+            for ev in events_affecting_play(all_events, play.warehouses)
+        ]
+    return {
+        "quarter": play.current_quarter,
+        "demand_zones": demand,
+        "revealed_zones": revealed,
+        "disruption_events": disruption_events,
+    }
 
 
 @router.post("/sessions/{play_id}/advance", tags=["student"])
-def advance_quarter(play_id: str, db: Session = Depends(get_db)):
+def advance_quarter(play_id: str, db: Session = Depends(get_db), email: str = Depends(require_student_email)):
     """Run current quarter simulation, save results, advance to next quarter."""
-    play = _get_play_or_404(play_id, db)
+    play = _get_play_or_404(play_id, db, for_update=True)
+    _require_member(db, play, email)
     if play.completed:
         raise HTTPException(400, "Game is already complete")
 
-    sc     = play.scenario
+    sc = play.scenario
+    # Instructor-controlled pacing: 0 = gating off. Otherwise the quarter
+    # about to be run/started must be <= sc.unlocked_quarter, shared by every
+    # play under this scenario code so all groups advance together.
+    target_quarter = play.current_quarter if play.current_quarter >= 1 else 1
+    if getattr(sc, "unlocked_quarter", 0) and target_quarter > sc.unlocked_quarter:
+        raise HTTPException(403, "This quarter hasn't been unlocked by the instructor yet.")
+
     wh_cfg = json.loads(sc.warehouse_config or "{}")
     v_cfg  = json.loads(sc.vehicle_config or "{}")
 
@@ -670,6 +912,35 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
     )
     play.cash -= pending_net_cost
     play.pending_vehicle_deltas = json.dumps({})
+
+    # Capital investment made during the quarter about to run/start — gross
+    # spend on NEW capacity (warehouse builds + net-new vehicle purchases),
+    # for the "when did they build capacity" investment chart. Captured
+    # before play.current_quarter is mutated below, and before is_sold status
+    # changes, so it reflects what was actually spent at the time it happened.
+    capex_quarter = play.current_quarter
+    capex_vehicles = compute_vehicle_capex(
+        pending_deltas, v_cfg, allow_moving_vehicles=getattr(sc, "allow_moving_vehicles", False)
+    )
+    def _purchase_price(wh):
+        return wh.purchase_price_paid if wh.purchase_price_paid is not None \
+            else wh_cfg.get(wh.warehouse_type, {}).get("purchase_cost", 0)
+
+    capex_warehouses = sum(
+        _purchase_price(wh)
+        for wh in play.warehouses
+        if wh.built_at_quarter == capex_quarter and not wh.is_sold
+    )
+    # A warehouse bought AND sold back within this same planning quarter is
+    # excluded above (not wh.is_sold), but real cash was still lost on the
+    # round trip (purchase price minus sell-back) — count that net loss so
+    # the investment chart doesn't silently show $0 for a quarter where the
+    # student actually lost capital.
+    capex_warehouses += sum(
+        max(0, _purchase_price(wh) - wh_cfg.get(wh.warehouse_type, {}).get("sell_back", 0))
+        for wh in play.warehouses
+        if wh.built_at_quarter == capex_quarter and wh.is_sold
+    )
 
     # ── Quarter 0 (Setup) ────────────────────────────────────────────────
     # Q0 is a real, distinct quarter with demand forced to 0 — players can
@@ -689,6 +960,8 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
     if play.current_quarter == 0:
         advance_warehouse_builds(play.warehouses, 1, wh_cfg)
         play.current_quarter = 1
+        play.setup_capex_warehouses = round(capex_warehouses, 2)
+        play.setup_capex_vehicles   = round(capex_vehicles, 2)
         db.commit()
 
         warehouse_states = [
@@ -711,6 +984,8 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
             "orders_fulfilled": 0, "orders_total": 0,
             "utilization_rate": 0.0, "serving_pct": 0.0, "stockouts": 0,
             "warehouse_breakdown": [],
+            "capex_warehouses": round(capex_warehouses, 2),
+            "capex_vehicles":   round(capex_vehicles, 2),
             "quarter":          0,
             "cash_after":       play.cash,
             "pending_vehicle_net_cost": 0.0,
@@ -801,6 +1076,17 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
             wh.x = 0.0
             wh.y = 0.0
 
+    # Same shared-per-scenario roll as the /demand preview above (identical
+    # seed inputs) — every play under this scenario code hits the same event
+    # on the same quarter; only plays with a warehouse at the targeted slot
+    # actually feel a warehouse_capacity event.
+    all_disruption_events = roll_disruption_events(
+        json.loads(sc.disruption_config or "{}"), sc.id, ran_quarter,
+        list(slots_by_id.keys()),
+    )
+    disruption_modifiers = compute_disruption_modifiers(all_disruption_events, play.warehouses)
+    play_disruption_events = events_affecting_play(all_disruption_events, play.warehouses)
+
     result = simulate_quarter(
         demand_zones=demand_flat,
         warehouses=play.warehouses,
@@ -810,7 +1096,11 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
         nonurgent_revenue=sc.nonurgent_order_revenue,
         current_quarter=ran_quarter,
         service_radius=sc.warehouse_service_radius,
+        disruption_modifiers=disruption_modifiers,
     )
+    result["disruption_events"] = [
+        {"message": ev["message"], "kind": ev["kind"]} for ev in play_disruption_events
+    ]
 
     # Combine outsourcing with warehouse simulation results
     outsource_revenue = outsource_urgent_rev + outsource_nonurgent_rev
@@ -819,12 +1109,16 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
     result["urgent_revenue"] = result["urgent_revenue"] + outsource_urgent_rev
     result["nonurgent_revenue"] = result["nonurgent_revenue"] + outsource_nonurgent_rev
     result["operating_cost"] = result["operating_cost"] + outsource_expenses
+    result["outsource_expenses"] = outsource_expenses
+    result["outsource_revenue"] = outsource_revenue
     result["profit"] = result["revenue"] - result["operating_cost"]
     result["orders_fulfilled"] = result["orders_fulfilled"] + outsource_fulfilled
     result["orders_total"] = result["orders_total"] + outsource_total
     result["urgent_fulfilled"] = result["urgent_fulfilled"] + outsource_urgent_fulfilled
     result["nonurgent_fulfilled"] = result["nonurgent_fulfilled"] + outsource_nonurgent_fulfilled
     result["serving_pct"] = round((result["orders_fulfilled"] / result["orders_total"]) if result["orders_total"] > 0 else 0.0, 4)
+    result["capex_warehouses"] = round(capex_warehouses, 2)
+    result["capex_vehicles"]   = round(capex_vehicles, 2)
 
     play.cash += result["profit"]
 
@@ -854,8 +1148,10 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
         large_utilization=wtu.get("large"),
         drone_cost=result["drone_cost"],
         truck_cost=result["truck_cost"],
+        overhead_cost=result["overhead_cost"],
         outsource_expenses=outsource_expenses,
         outsource_revenue=outsource_revenue,
+        disruption_events=json.dumps(result["disruption_events"]),
     )
     db.add(qr)
 
@@ -872,6 +1168,9 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
         "orders_fulfilled":         result["orders_fulfilled"],
         "orders_total":             result["orders_total"],
         "utilization_rate":         result["utilization_rate"],
+        "fleet_capacity":           result["fleet_capacity"],
+        "capex_warehouses":         result["capex_warehouses"],
+        "capex_vehicles":           result["capex_vehicles"],
         "drone_utilization":        result["drone_utilization"],
         "truck_utilization":        result["truck_utilization"],
         "serving_pct":              result["serving_pct"],
@@ -883,8 +1182,10 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
         "warehouse_type_utilization": result["warehouse_type_utilization"],
         "drone_cost":               result["drone_cost"],
         "truck_cost":               result["truck_cost"],
+        "overhead_cost":            result["overhead_cost"],
         "outsource_expenses":       outsource_expenses,
         "outsource_revenue":        outsource_revenue,
+        "disruption_events":        result["disruption_events"],
     })
     play.quarterly_results = json.dumps(qr_list)
 
@@ -898,7 +1199,15 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
         # Advance warehouse builds to the new quarter so they are active for the planning phase
         advance_warehouse_builds(play.warehouses, next_q, wh_cfg)
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Two group members hit Run Quarter at the same instant. The row
+        # lock above closes this race on Postgres; on SQLite (no row-level
+        # locking) the uq_quarter_results_play_quarter constraint is the
+        # backstop instead — surface a clean retry rather than a raw 500.
+        db.rollback()
+        raise HTTPException(409, "This quarter was just advanced by a teammate. Please refresh and try again.")
 
     # Return updated warehouse states relative to the next planning quarter (next_q)
     # so the frontend planning state is correctly initialized as active/ready.
@@ -930,7 +1239,8 @@ def advance_quarter(play_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/sessions/{play_id}/history", tags=["student"])
-def get_history(play_id: str, db: Session = Depends(get_db)):
+def get_history(play_id: str, db: Session = Depends(get_db), email: str = Depends(require_student_email)):
     """Full P&L history for the sidebar."""
     play = _get_play_or_404(play_id, db)
+    _require_member(db, play, email)
     return json.loads(play.quarterly_results or "[]")

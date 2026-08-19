@@ -1,5 +1,13 @@
 # Blueprint: Securing the Instructor Dashboard
 
+> [!NOTE]
+> **Status: Implemented.** This blueprint's approach (HTTP Basic Auth, env-var
+> credentials, zero DB tables) was built as described below, as part of a
+> larger access-control feature that also added passwordless student email
+> verification. See [rules.txt](rules.txt) Section 8 (Access Control) and the
+> Development Log for the full design and implementation record. This file is
+> kept for historical reference.
+
 This document provides a detailed, step-by-step implementation guide to secure the Instructor Dashboard. It is designed so that any future developer or AI agent can pick up this task and implement it with minimal context.
 
 ---

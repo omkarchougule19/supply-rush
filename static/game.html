@@ -15,7 +15,7 @@
     html, body { width:100%; height:100%; overflow:hidden; font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); }
 
     /* ENTRY */
-    #entry-screen { position:fixed; inset:0; z-index:100; background:var(--bg); display:flex; align-items:center; justify-content:center; }
+    #entry-screen, #verify-screen { position:fixed; inset:0; z-index:100; background:var(--bg); display:flex; align-items:center; justify-content:center; }
     .entry-box { width:min(420px, 92vw); background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:clamp(24px,5vw,40px) clamp(18px,5vw,36px); text-align:center; }
     .entry-logo { width:56px; height:56px; background:linear-gradient(135deg,var(--accent),var(--accent2)); border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:28px; margin:0 auto 18px; }
     .entry-title { font-family:'Space Grotesk',sans-serif; font-size:28px; font-weight:700; color:var(--accent); margin-bottom:6px; }
@@ -230,10 +230,73 @@
     .warehouse-slot, .placed-warehouse, .demand-spot { position:absolute; transform:translate(-50%,-50%); pointer-events:all; }
     .warehouse-slot { width:34px; height:34px; border-radius:8px; border:2px dashed rgba(255,210,74,.4); background:rgba(255,210,74,.05); display:flex; align-items:center; justify-content:center; font-size:16px; cursor:pointer; transition:all .15s; color:rgba(255,210,74,.45); user-select:none; }
     .warehouse-slot:hover { border-color:var(--accent); background:rgba(255,210,74,.13); color:var(--accent); transform:translate(-50%,-50%) scale(1.12); }
-    .placed-warehouse { font-size:28px; cursor:pointer; filter:drop-shadow(0 0 7px rgba(255,210,74,.5)); transition:transform .15s; user-select:none; }
-    .placed-warehouse:hover { transform:translate(-50%,-50%) scale(1.13); }
-    .placed-warehouse.building { filter:grayscale(.55) drop-shadow(0 0 6px rgba(96,200,255,.45)); }
-    .placed-warehouse.ready { filter:drop-shadow(0 0 8px rgba(255,210,74,.75)); animation:pulse-ready 1.4s ease-in-out infinite; }
+    .placed-warehouse {
+      font-size: 20px;
+      cursor: pointer;
+      transition: transform .15s, box-shadow .15s;
+      user-select: none;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(10, 18, 32, 0.88);
+      border: 2px solid var(--accent);
+      box-shadow: 0 0 8px rgba(255, 210, 74, 0.4);
+    }
+    .placed-warehouse:hover { transform: translate(-50%,-50%) scale(1.13); }
+    .placed-warehouse.small {
+      border-color: #FFD24A;
+      background: rgba(255, 210, 74, 0.15);
+      box-shadow: 0 0 10px rgba(255, 210, 74, 0.6);
+    }
+    .placed-warehouse.medium {
+      border-color: #60C8FF;
+      background: rgba(96, 200, 255, 0.15);
+      box-shadow: 0 0 10px rgba(96, 200, 255, 0.7);
+    }
+    .placed-warehouse.large {
+      border-color: #A78BFA;
+      background: rgba(167, 139, 250, 0.15);
+      box-shadow: 0 0 12px rgba(167, 139, 250, 0.8);
+    }
+    .placed-warehouse.building {
+      border-style: dashed;
+      opacity: 0.75;
+    }
+    .placed-warehouse.small.building {
+      border-color: #FFD24A;
+      background: rgba(255, 210, 74, 0.08);
+      box-shadow: 0 0 6px rgba(255, 210, 74, 0.3);
+    }
+    .placed-warehouse.medium.building {
+      border-color: #60C8FF;
+      background: rgba(96, 200, 255, 0.08);
+      box-shadow: 0 0 6px rgba(96, 200, 255, 0.3);
+    }
+    .placed-warehouse.large.building {
+      border-color: #A78BFA;
+      background: rgba(167, 139, 250, 0.08);
+      box-shadow: 0 0 6px rgba(167, 139, 250, 0.3);
+    }
+    .wh-size-badge {
+      position: absolute;
+      bottom: -2px; right: -2px;
+      font-size: 8px; font-weight: 800;
+      line-height: 1;
+      padding: 1px 3px;
+      border-radius: 4px;
+      letter-spacing: .04em;
+      pointer-events: none;
+      font-family: 'Space Grotesk', sans-serif;
+    }
+    .placed-warehouse.small .wh-size-badge  { background: #FFD24A; color: #1a1200; }
+    .placed-warehouse.medium .wh-size-badge { background: #60C8FF; color: #001a2e; }
+    .placed-warehouse.large .wh-size-badge  { background: #A78BFA; color: #1a0040; }
+    .placed-warehouse.ready {
+      animation: pulse-ready 1.4s ease-in-out infinite;
+    }
     @keyframes pulse-ready { 0%,100%{opacity:1} 50%{opacity:.6} }
     .demand-spot { border-radius:50%; cursor:default; position:absolute; }
     .demand-spot.urgent { width:15px; height:15px; background:var(--red); border:2px solid rgba(255,255,255,.65); animation:pulse-red 1.6s ease-out infinite; }
@@ -372,7 +435,25 @@
 <body>
 
 <!-- ENTRY SCREEN -->
-<div id="entry-screen">
+<div id="verify-screen" style="display:none">
+  <div class="entry-box">
+    <div class="entry-logo">🔒</div>
+    <div class="entry-title">Verify Your Email</div>
+    <p class="entry-sub" id="verify-sub">Enter your school email to continue</p>
+    <input class="entry-name-input" id="verify-email" type="email" placeholder="you@illinois.edu"/>
+    <button class="entry-btn entry-btn-primary" id="verify-send-btn" onclick="requestVerificationCode()">Send Code</button>
+    <div id="verify-code-section" style="display:none">
+      <input class="entry-input" id="verify-code" type="text" maxlength="6" placeholder="123456" oninput="this.value=this.value.replace(/[^0-9]/g,'')"/>
+      <button class="entry-btn entry-btn-secondary" onclick="verifyCode()">Verify</button>
+      <div style="margin-top:10px;">
+        <a href="#" style="font-size:12px;color:var(--muted);text-decoration:none;" onclick="event.preventDefault();requestVerificationCode();">Resend code</a>
+      </div>
+    </div>
+    <div class="entry-error" id="verify-error"></div>
+  </div>
+</div>
+
+<div id="entry-screen" style="display:none">
   <div class="entry-box">
     <div class="entry-logo">🚚</div>
     <div class="entry-title">Supply Rush</div>
@@ -381,6 +462,7 @@
     <button class="entry-btn entry-btn-primary" onclick="startNormalMode()">&#9654; Play Now</button>
     <div class="entry-divider"><span>or enter a class code</span></div>
     <input class="entry-input" id="entry-code" type="text" maxlength="8" placeholder="RUSH42" oninput="this.value=this.value.toUpperCase()"/>
+    <input class="entry-name-input" id="entry-group" type="text" placeholder="Group name (e.g. Team 3)" style="margin-top:8px;"/>
     <button class="entry-btn entry-btn-secondary" onclick="startWithCode()">Join Scenario</button>
     <div class="entry-error" id="entry-error"></div>
     <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
@@ -436,6 +518,10 @@
         </div>
         <div class="forecast-note">Drones count toward both — their capacity is shared, not doubled.</div>
       </div>
+      <div class="forecast-card" id="disruption-forecast-card" style="display:none; border-color:var(--red)">
+        <div class="forecast-row" style="font-weight:700; margin-bottom:4px">⚠️ Disruption Forecast</div>
+        <div id="disruption-forecast-list"></div>
+      </div>
       <div class="sb-head">P&amp;L History</div>
       <div class="pl-chart-wrap"><canvas id="pl-chart" height="90"></canvas></div>
       <div class="sb-metrics">
@@ -480,7 +566,18 @@
       <div class="lp-row"><div class="lp-dot" style="background:var(--blue)"></div><div class="lp-label">Non-urgent order</div></div>
       <div class="lp-row"><div style="width:14px;height:14px;background:rgba(255,210,74,.16);border:2px dashed rgba(255,210,74,.95);border-radius:50%;box-shadow:0 0 4px rgba(255,210,74,.5)"></div><div class="lp-label">Known zone (no order yet)</div></div>
       <div class="lp-section">Warehouses</div>
-      <div class="lp-row"><span style="font-size:15px">🏭</span><div class="lp-label">Active</div></div>
+      <div class="lp-row">
+        <div style="width:18px;height:18px;border-radius:50%;border:2px solid #FFD24A;background:rgba(10,18,32,0.88);box-shadow:0 0 4px rgba(255,210,74,0.6);display:flex;align-items:center;justify-content:center;font-size:10px;line-height:1">🏭</div>
+        <div class="lp-label">Small (500 capacity)</div>
+      </div>
+      <div class="lp-row">
+        <div style="width:18px;height:18px;border-radius:50%;border:2px solid #60C8FF;background:rgba(10,18,32,0.88);box-shadow:0 0 4px rgba(96,200,255,0.7);display:flex;align-items:center;justify-content:center;font-size:10px;line-height:1">🏭</div>
+        <div class="lp-label">Medium (1200 capacity)</div>
+      </div>
+      <div class="lp-row">
+        <div style="width:18px;height:18px;border-radius:50%;border:2px solid #A78BFA;background:rgba(10,18,32,0.88);box-shadow:0 0 5px rgba(167,139,250,0.8);display:flex;align-items:center;justify-content:center;font-size:10px;line-height:1">🏭</div>
+        <div class="lp-label">Large (2500 capacity)</div>
+      </div>
       <div class="lp-row"><span style="font-size:15px">🔧</span><div class="lp-label">Under construction</div></div>
       <div class="lp-row"><div style="width:13px;height:13px;border:2px dashed rgba(255,210,74,.5);border-radius:3px"></div><div class="lp-label">Available slot</div></div>
       <div class="lp-section">Routes</div>
@@ -550,13 +647,31 @@
     <div class="gameover-sub" id="go-sub"></div>
     <div class="gameover-stats" id="go-stats"></div>
     <div class="go-charts">
+      <!-- $ charts -->
       <div class="go-chart-card">
-        <div class="go-chart-title">Fleet Utilization Over Time</div>
-        <canvas id="chart-utilization"></canvas>
+        <div class="go-chart-title">Cash Balance Over Time</div>
+        <canvas id="chart-cash"></canvas>
       </div>
       <div class="go-chart-card">
         <div class="go-chart-title">Revenue Per Quarter</div>
         <canvas id="chart-revenue"></canvas>
+      </div>
+      <div class="go-chart-card">
+        <div class="go-chart-title">Revenue vs Spending</div>
+        <canvas id="chart-rev-spend"></canvas>
+      </div>
+      <div class="go-chart-card">
+        <div class="go-chart-title">Operating Cost Breakdown — Drone / Truck / Overhead / Outsourcing</div>
+        <canvas id="chart-spend-stack"></canvas>
+      </div>
+      <div class="go-chart-card">
+        <div class="go-chart-title">Capacity Investment Over Time</div>
+        <canvas id="chart-investment"></canvas>
+      </div>
+      <!-- demand / fulfillment charts -->
+      <div class="go-chart-card">
+        <div class="go-chart-title">Fleet Capacity vs Demand Over Time</div>
+        <canvas id="chart-capacity"></canvas>
       </div>
       <div class="go-chart-card">
         <div class="go-chart-title">Orders Delivered — Urgent vs Non-Urgent</div>
@@ -566,17 +681,14 @@
         <div class="go-chart-title">% Demand Satisfied — Urgent vs Non-Urgent</div>
         <canvas id="chart-demand-pct"></canvas>
       </div>
+      <!-- utilization charts -->
+      <div class="go-chart-card">
+        <div class="go-chart-title">Fleet Utilization Over Time</div>
+        <canvas id="chart-utilization"></canvas>
+      </div>
       <div class="go-chart-card">
         <div class="go-chart-title">Avg Utilization by Warehouse Category</div>
         <canvas id="chart-wh-util"></canvas>
-      </div>
-      <div class="go-chart-card">
-        <div class="go-chart-title">Revenue vs Spending</div>
-        <canvas id="chart-rev-spend"></canvas>
-      </div>
-      <div class="go-chart-card">
-        <div class="go-chart-title">Spending Breakdown — Drone vs Truck</div>
-        <canvas id="chart-spend-stack"></canvas>
       </div>
     </div>
     <button class="gameover-btn" onclick="location.reload()">Play Again</button>
@@ -594,6 +706,9 @@ var DEMO_ID = "DEMO0000";
 // Set from scenario.warehouse_service_radius once a play loads (see
 // initGame) — instructor-configured only, not shown/adjustable in-game.
 var MAX_ROUTE_DISTANCE = 30;
+var gateStatusTimer = null;
+var GATE_POLL_MS = 7000;
+var advanceInFlight = false; // true while a Run Quarter request is out — blocks refreshGateStatus's poll from re-enabling the button mid-request
 
 var state = {
   playId: null, scenarioCode: null, studentName: null,
@@ -604,24 +719,58 @@ var state = {
   selectedSlotId: null
 };
 
-// Fallback only — real positions always come from backend scenario config
-var WH_SLOTS = [];
-var DEMAND_POOL = [];
+// Fallback only, for true offline mode (backend unreachable even for the
+// very first request) — kept in sync with game_logic.py's DEFAULT_WAREHOUSE_SLOTS
+// / DEFAULT_DEMAND_POSITIONS / target_wh_cfg / target_v_cfg, the backend's own
+// single source of truth. Should never be needed in practice.
+var WH_SLOTS = [
+  {"id":"s1", "x":58.42, "y":41.71},
+  {"id":"s4", "x":51.43, "y":75.94}, {"id":"s6", "x":68.00, "y":70.00},
+  {"id":"s7", "x":39.80, "y":30.39},
+  {"id":"s8", "x":43.50, "y":55.50}, {"id":"s9", "x":63.50, "y":31.50}, {"id":"s10", "x":66.50, "y":62.50},
+  {"id":"s11", "x":48.50, "y":25.50},
+];
+var DEMAND_POOL = [
+  {"id":"d1", "x":46.36, "y":57.13}, {"id":"d2", "x":60.41, "y":92.87}, {"id":"d3", "x":65.05, "y":58.91},
+  {"id":"d4", "x":39.37, "y":14.17}, {"id":"d5", "x":58.84, "y":26.20}, {"id":"d6", "x":44.79, "y":43.49},
+  {"id":"d7", "x":71.26, "y":87.17}, {"id":"d8", "x":62.13, "y":70.59}, {"id":"d9", "x":47.93, "y":22.10},
+  {"id":"d10", "x":38.73, "y":65.78}, {"id":"d11", "x":50.29, "y":87.52}, {"id":"d12", "x":61.06, "y":81.73},
+  {"id":"d13", "x":50.64, "y":33.69}, {"id":"d14", "x":32.24, "y":22.46}, {"id":"d15", "x":56.21, "y":52.50},
+  {"id":"d16", "x":52.78, "y":65.51}, {"id":"d17", "x":69.12, "y":96.79}, {"id":"d18", "x":64.76, "y":49.91},
+  {"id":"d19", "x":69.19, "y":66.31}, {"id":"d20", "x":61.70, "y":34.22}, {"id":"d21", "x":55.21, "y":18.98},
+  {"id":"d22", "x":77.39, "y":82.17}, {"id":"d23", "x":40.09, "y":22.19}, {"id":"d24", "x":46.50, "y":69.88},
+  {"id":"d25", "x":48.93, "y":49.91}, {"id":"d26", "x":57.70, "y":59.80}, {"id":"d27", "x":68.26, "y":80.48},
+  {"id":"d28", "x":77.96, "y":89.75}, {"id":"d29", "x":43.94, "y":36.36}, {"id":"d30", "x":51.36, "y":40.91},
+  {"id":"d31", "x":49.29, "y":15.24}, {"id":"d32", "x":54.35, "y":82.09}, {"id":"d33", "x":46.29, "y":28.61},
+  {"id":"d34", "x":64.62, "y":87.52}, {"id":"d35", "x":58.13, "y":75.94}, {"id":"d36", "x":45.01, "y":63.46},
+  {"id":"d37", "x":52.50, "y":26.92}, {"id":"d38", "x":67.26, "y":74.15}, {"id":"d39", "x":56.78, "y":87.88},
+  {"id":"d40", "x":61.98, "y":64.44}, {"id":"d41", "x":54.14, "y":46.26}, {"id":"d42", "x":56.13, "y":36.27},
+  {"id":"d43", "x":58.04, "y":49.54}, {"id":"d44", "x":53.63, "y":70.52}, {"id":"d45", "x":61.53, "y":78.01},
+  {"id":"d46", "x":63.17, "y":94.71}, {"id":"d47", "x":54.94, "y":32.49}, {"id":"d48", "x":42.74, "y":18.42},
+  {"id":"d49", "x":64.49, "y":54.57}, {"id":"d50", "x":52.03, "y":51.59}, {"id":"d51", "x":48.87, "y":38.07},
+  {"id":"d52", "x":43.52, "y":73.70}, {"id":"d53", "x":60.39, "y":38.32}, {"id":"d54", "x":55.07, "y":24.40},
+  {"id":"d55", "x":52.82, "y":37.15}, {"id":"d56", "x":52.64, "y":61.13}, {"id":"d57", "x":47.65, "y":75.76},
+  {"id":"d58", "x":74.80, "y":87.56}, {"id":"d59", "x":61.13, "y":87.77}, {"id":"d60", "x":65.19, "y":46.24},
+  {"id":"d61", "x":65.44, "y":67.94}, {"id":"d62", "x":74.21, "y":95.88}, {"id":"d63", "x":63.62, "y":74.29},
+  {"id":"d64", "x":67.39, "y":84.66}, {"id":"d65", "x":36.88, "y":20.24}, {"id":"d66", "x":49.74, "y":29.90},
+  {"id":"d67", "x":51.99, "y":56.02}, {"id":"d68", "x":45.98, "y":91.62}, {"id":"d69", "x":42.80, "y":59.88},
+  {"id":"d70", "x":59.46, "y":20.58},
+];
 
 var DEFAULT_SCENARIO = {
   total_quarters:16, starting_budget:3000000,
   allow_outsourcing:true, allow_moving_vehicles:false,
   warehouse_config:{
-    small:{purchase_cost:250000,capacity:500,build_quarters:1,sell_back:125000},
-    medium:{purchase_cost:500000,capacity:1200,build_quarters:2,sell_back:250000},
-    large:{purchase_cost:800000,capacity:2500,build_quarters:4,sell_back:400000}
+    small:{purchase_cost:250000,capacity:500,build_quarters:1,sell_back:125000,overhead_cost:20000},
+    medium:{purchase_cost:500000,capacity:1200,build_quarters:2,sell_back:250000,overhead_cost:30000},
+    large:{purchase_cost:800000,capacity:2500,build_quarters:4,sell_back:400000,overhead_cost:40000}
   },
   vehicle_config:{
-    truck:{purchase_cost:80000,operating_cost:8000,capacity:200,sell_back:56000,serves_urgent:false,serves_nonurgent:true},
-    drone:{purchase_cost:25000,operating_cost:3000,capacity:60,sell_back:17500,serves_urgent:true,serves_nonurgent:true}
+    truck:{purchase_cost:20000,operating_cost:800,capacity:200,sell_back:12000,serves_urgent:false,serves_nonurgent:true},
+    drone:{purchase_cost:9000,operating_cost:800,capacity:60,sell_back:5400,serves_urgent:true,serves_nonurgent:true}
   },
-  urgent_order_revenue:45, nonurgent_order_revenue:20,
-  demand_min_per_zone:200, demand_max_per_zone:800, urgent_demand_ratio:0.3,
+  urgent_order_revenue:55, nonurgent_order_revenue:25,
+  demand_min_per_zone:133, demand_max_per_zone:532, urgent_demand_ratio:0.3,
   warehouse_service_radius:30,
   warehouse_slots:WH_SLOTS, demand_zone_positions:DEMAND_POOL
 };
@@ -674,6 +823,8 @@ function exitToHome(discard) {
   showConfirm(title, msg, function() {
     closePause();
     hideDeliveryOverlay();
+    advanceInFlight = false;
+    if (gateStatusTimer) { clearInterval(gateStatusTimer); gateStatusTimer = null; }
     document.getElementById("wh-panel").classList.remove("open");
     var rSidebar = document.getElementById("results-sidebar");
     if (rSidebar) rSidebar.classList.remove("show");
@@ -719,16 +870,48 @@ window.addEventListener("load", function() {
   }
   var fcLabel = document.getElementById("fc-urgent-label");
   if (fcLabel) fcLabel.innerHTML = droneIconSVG(13) + ' <span style="vertical-align:middle">Urgent-capable capacity</span>';
+  checkAuthAndShowEntry();
 });
 
 /* ── ENTRY ── */
+// A 401 here means the session cookie expired/was never set (distinct from
+// the backend being unreachable) — re-show the verify gate instead of
+// silently falling into unauthenticated offline demo mode, which would
+// defeat the point of requiring verification in the first place.
+var AUTH_REQUIRED_ERROR = "auth-required";
+// Shared 401 check for every mid-game request gated by require_student_email
+// (advance/demand/outsource/warehouses/vehicles) — without this, an expired
+// session cookie mid-game surfaces as an opaque generic error with no path
+// back to re-verification, instead of the same re-verify gate the two entry
+// points below already show.
+function checkAuthResponse(r) {
+  if (r.status === 401) { showVerifyScreen(); throw new Error(AUTH_REQUIRED_ERROR); }
+  return r;
+}
+function isAuthRequiredError(e) {
+  return !!(e && e.message === AUTH_REQUIRED_ERROR);
+}
+function showVerifyScreen() {
+  document.getElementById("entry-screen").style.display = "none";
+  document.getElementById("verify-code-section").style.display = "none";
+  document.getElementById("verify-send-btn").disabled = false;
+  document.getElementById("verify-send-btn").textContent = "Send Code";
+  document.getElementById("verify-sub").textContent = "Your session expired — please verify your email again";
+  setVerifyErr("");
+  document.getElementById("verify-screen").style.display = "flex";
+}
+
 function startNormalMode() {
   var name = document.getElementById("entry-name").value.trim();
   setErr("");
   fetch(API+"/sessions/normal",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({student_name:name||null})})
-    .then(function(r){ return r.ok ? r.json() : Promise.reject(); })
+    .then(function(r){
+      if (r.status === 401) { showVerifyScreen(); throw new Error(AUTH_REQUIRED_ERROR); }
+      return r.ok ? r.json() : Promise.reject(new Error("http-error"));
+    })
     .then(initGame)
     .catch(function(err){
+      if (err && err.message === AUTH_REQUIRED_ERROR) return;
       console.error("[Supply Rush] Could not reach backend at "+API+"/sessions/normal — falling back to OFFLINE DEMO MODE. Warehouse builds and demand will run entirely client-side (this is NOT the real simulation). Check that uvicorn is running and reachable at this origin.", err);
       initGame({play_id:DEMO_ID,scenario_code:null,student_name:name||null,
         current_quarter:1,total_quarters:16,cash:3000000,completed:false,
@@ -738,17 +921,88 @@ function startNormalMode() {
 function startWithCode() {
   var code = document.getElementById("entry-code").value.trim().toUpperCase();
   var name = document.getElementById("entry-name").value.trim();
+  var groupName = document.getElementById("entry-group").value.trim();
   if (!code) { setErr("Please enter a scenario code."); return; }
   setErr("");
-  fetch(API+"/sessions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({scenario_code:code,student_name:name||null})})
-    .then(function(r){ return r.ok ? r.json() : r.json().then(function(e){ throw e; }); })
+  fetch(API+"/sessions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({scenario_code:code,student_name:name||null,group_name:groupName||null})})
+    .then(function(r){
+      if (r.status === 401) { showVerifyScreen(); throw new Error(AUTH_REQUIRED_ERROR); }
+      return r.ok ? r.json() : r.json().then(function(e){ throw e; });
+    })
     .then(initGame)
-    .catch(function(e){ setErr((e&&e.detail)||"Code not found. Check with your instructor."); });
+    .catch(function(e){
+      if (e && e.message === AUTH_REQUIRED_ERROR) return;
+      setErr((e&&e.detail)||"Code not found. Check with your instructor.");
+    });
 }
 function setErr(m){ document.getElementById("entry-error").textContent=m; }
 
+/* ── EMAIL VERIFICATION (passwordless, school-email-only when enabled) ── */
+function setVerifyErr(m){ document.getElementById("verify-error").textContent=m; }
+
+function requestVerificationCode() {
+  var email = document.getElementById("verify-email").value.trim();
+  setVerifyErr("");
+  if (!email) { setVerifyErr("Please enter your email."); return; }
+  var btn = document.getElementById("verify-send-btn");
+  btn.disabled = true; btn.textContent = "Sending...";
+  fetch(API+"/auth/request-code",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:email})})
+    .then(function(r){ return r.ok ? r.json() : r.json().then(function(e){ throw e; }); })
+    .then(function(){
+      document.getElementById("verify-code-section").style.display = "block";
+      document.getElementById("verify-sub").textContent = "Enter the 6-digit code we sent to " + email;
+      btn.textContent = "Code Sent";
+      setTimeout(function(){ btn.disabled = false; btn.textContent = "Resend Code"; }, 60000);
+    })
+    .catch(function(e){
+      setVerifyErr((e&&e.detail) || "Could not send code. Please try again.");
+      btn.disabled = false; btn.textContent = "Send Code";
+    });
+}
+
+function verifyCode() {
+  var email = document.getElementById("verify-email").value.trim();
+  var code = document.getElementById("verify-code").value.trim();
+  setVerifyErr("");
+  if (!code) { setVerifyErr("Please enter the code."); return; }
+  fetch(API+"/auth/verify-code",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:email,code:code})})
+    .then(function(r){ return r.ok ? r.json() : r.json().then(function(e){ throw e; }); })
+    .then(function(){
+      document.getElementById("verify-screen").style.display = "none";
+      // A mid-game session expiry (checkAuthResponse -> showVerifyScreen)
+      // leaves state.playId and the game-ui pointing at a still-valid play —
+      // re-verifying should resume it, not send the student back through
+      // scenario code + group name entry.
+      if (state.playId && state.playId !== DEMO_ID && !state.completed) {
+        fetchDemand();
+        return;
+      }
+      document.getElementById("entry-screen").style.display = "flex";
+    })
+    .catch(function(e){ setVerifyErr((e&&e.detail) || "Invalid or expired code."); });
+}
+
+// Runs once on page load — decides whether to show the email-verify gate or
+// go straight to the normal entry screen. Fails open to the entry screen if
+// the backend is unreachable (offline demo mode must still be reachable).
+function checkAuthAndShowEntry() {
+  fetch(API+"/auth/me")
+    .then(function(r){ return r.ok ? r.json() : {verification_required:false, email:null}; })
+    .then(function(data){
+      if (data.verification_required && !data.email) {
+        document.getElementById("verify-screen").style.display = "flex";
+      } else {
+        document.getElementById("entry-screen").style.display = "flex";
+      }
+    })
+    .catch(function(){
+      document.getElementById("entry-screen").style.display = "flex";
+    });
+}
+
 /* ── INIT ── */
 function initGame(data) {
+  advanceInFlight = false;
   if (plChart) { plChart.destroy(); plChart = null; }
   state.playId         = data.play_id;
   state.scenarioCode   = data.scenario_code;
@@ -767,6 +1021,8 @@ function initGame(data) {
   state.revealedZones    = [];
   state.pendingVehicleNetCost = data.pending_vehicle_net_cost || 0;
   state.demoPendingDeltas = {};
+  state.demoWarehouseCapex = 0;
+  state.startCapex = data.start_capex || {warehouses:0, vehicles:0};
   MAX_ROUTE_DISTANCE = state.scenario.warehouse_service_radius || 30;
 
   document.getElementById("entry-screen").style.display = "none";
@@ -778,6 +1034,12 @@ function initGame(data) {
     document.getElementById("demo-mode-banner").style.display = "flex";
   } else {
     document.getElementById("demo-mode-banner").style.display = "none";
+  }
+
+  if (gateStatusTimer) { clearInterval(gateStatusTimer); gateStatusTimer = null; }
+  if (state.playId !== DEMO_ID) {
+    refreshGateStatus();
+    gateStatusTimer = setInterval(refreshGateStatus, GATE_POLL_MS);
   }
 
   updateHUD();
@@ -870,8 +1132,13 @@ function renderSlots() {
     if (placed) {
       var qtrs = placed.quartersUntilActive || 0;
       var ready = !placed.isActive && placed.activatesNextRun;
-      el.className = "placed-warehouse" + (placed.isActive ? "" : (ready ? " ready" : " building"));
-      el.textContent = placed.isActive ? "🏭" : (ready ? "⏳" : "🔧");
+      el.className = "placed-warehouse " + placed.warehouseType + (placed.isActive ? "" : (ready ? " ready" : " building"));
+      var emoji = document.createTextNode(placed.isActive ? "🏭" : (ready ? "⏳" : "🔧"));
+      el.appendChild(emoji);
+      var badge = document.createElement("span");
+      badge.className = "wh-size-badge";
+      badge.textContent = placed.warehouseType.charAt(0).toUpperCase();
+      el.appendChild(badge);
       el.title = placed.isActive
         ? cap(placed.warehouseType)+" warehouse (active)"
         : ready
@@ -1299,7 +1566,7 @@ function hideDeliveryOverlay() {
 function fetchDemand() {
   if (!state.playId||state.playId===DEMO_ID) { fakeDemand(); return; }
   fetch(API+"/sessions/"+state.playId+"/demand")
-    .then(function(r){ return r.ok?r.json():Promise.reject(); })
+    .then(function(r){ checkAuthResponse(r); return r.ok?r.json():Promise.reject(); })
     .then(function(d){
       if (!state.playId) return;
       var zones = d.demand_zones || {};
@@ -1307,8 +1574,10 @@ function fetchDemand() {
       state.nonurgentSpots = zones.nonurgent || [];
       state.revealedZones  = d.revealed_zones || [];
       renderDemandSpots(); renderRoutes();
+      renderDisruptionForecast(d.disruption_events || []);
     })
     .catch(function(err){
+      if (isAuthRequiredError(err)) return;
       console.error("[Supply Rush] /sessions/"+state.playId+"/demand failed mid-game — falling back to client-side fakeDemand(). This play_id will be out of sync with the backend from here on.", err);
       fakeDemand();
     });
@@ -1386,6 +1655,31 @@ function fakeDemand() {
   state.nonurgentSpots = activeNonurgent;
   renderDemandSpots();
   renderRoutes();
+  // Offline demo mode has no real scenario/DB row to seed disruption events
+  // off, and it's already a stripped-down fallback — no forecast here.
+  renderDisruptionForecast([]);
+}
+
+/* ── DISRUPTION FORECAST ── */
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+  });
+}
+function renderDisruptionForecast(events) {
+  var card = document.getElementById("disruption-forecast-card");
+  var list = document.getElementById("disruption-forecast-list");
+  state.disruptionForecast = events || [];
+  if (!events || !events.length) {
+    card.style.display = "none";
+    list.innerHTML = "";
+    return;
+  }
+  card.style.display = "block";
+  list.innerHTML = events.map(function(ev){
+    return '<div class="forecast-row" style="justify-content:flex-start">'
+      + '<span style="font-size:11px;line-height:1.4">' + escapeHtml(ev.message) + '</span></div>';
+  }).join("");
 }
 
 /* ── ZONE PANEL (Outsourcing) ── */
@@ -1470,14 +1764,14 @@ function toggleOutsourceZone(zoneId, el) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ zone_id: zoneId, outsourced: outsourced })
-  }).then(function(r) { return r.ok ? r.json() : r.json().then(function(e){ throw e; }); })
+  }).then(function(r) { checkAuthResponse(r); return r.ok ? r.json() : r.json().then(function(e){ throw e; }); })
     .then(function(d) {
       if (!state.playId) return;
       state.outsourcedZones = d.outsourced_zones;
       el.classList.toggle("on");
       renderDemandSpots(); renderRoutes();
     })
-    .catch(function(e) { showPanelError((e && e.detail) || "Error updating outsource status."); });
+    .catch(function(e) { if (isAuthRequiredError(e)) return; showPanelError((e && e.detail) || "Error updating outsource status."); });
 }
 
 
@@ -1496,6 +1790,7 @@ function openBuyPanel(slot) {
       +'<div class="wh-stat">Cost: <span>$'+fmt(cfg.purchase_cost)+'</span></div>'
       +'<div class="wh-stat">Capacity: <span>'+fmt(cfg.capacity)+'/qtr</span></div>'
       +'<div class="wh-stat">Build: <span>'+cfg.build_quarters+' qtr'+(cfg.build_quarters>1?'s':'')+'</span></div>'
+      +'<div class="wh-stat">Overhead: <span>$'+fmt(cfg.overhead_cost||0)+'/qtr</span></div>'
       +'<div class="wh-stat">Sell-back: <span>$'+fmt(cfg.sell_back)+'</span></div>'
       +'</div></div>';
   });
@@ -1550,19 +1845,20 @@ function confirmBuy() {
   }
 
   if (state.playId===DEMO_ID) {
+    state.demoWarehouseCapex = (state.demoWarehouseCapex||0) + cfg.purchase_cost;
     doPlace({id:Date.now(), cashLeft:state.cash-cfg.purchase_cost,
       isActive:cfg.build_quarters===0, quartersUntilActive:cfg.build_quarters}); return;
   }
   fetch(API+"/sessions/"+state.playId+"/warehouses",{
     method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({slot_id:state.selectedSlotId,warehouse_type:type})
-  }).then(function(r){ return r.ok?r.json():r.json().then(function(e){throw e;}); })
+  }).then(function(r){ checkAuthResponse(r); return r.ok?r.json():r.json().then(function(e){throw e;}); })
     .then(function(d){
       if (!state.playId) return;
       doPlace({id:d.warehouse_id, cashLeft:d.cash_remaining,
       isActive:d.is_active, quartersUntilActive:d.quarters_until_active, activatesNextRun:d.activates_next_run});
     })
-    .catch(function(e){ showPanelError((e&&e.detail)||"Error placing warehouse."); });
+    .catch(function(e){ if (isAuthRequiredError(e)) return; showPanelError((e&&e.detail)||"Error placing warehouse."); });
 }
 
 /* ── MANAGE PANEL ── */
@@ -1628,6 +1924,7 @@ function openManagePanel(slot, placed) {
     +'<div class="wh-type-stats">'
     +'<div class="wh-stat">Type: <span>'+cap(placed.warehouseType)+'</span></div>'
     +'<div class="wh-stat">Capacity: <span>'+fmt(wCfg.capacity)+'/qtr</span></div>'
+    +'<div class="wh-stat">Overhead: <span>$'+fmt(wCfg.overhead_cost||0)+'/qtr</span></div>'
     +'<div class="wh-stat" style="grid-column:span 2">Status: <span style="color:'+statusColor+'">'+statusText+'</span></div>'
     +'</div></div>';
 
@@ -1720,6 +2017,27 @@ function computePendingVehicleNetCost(deltas, vehicleConfig) {
   return total;
 }
 
+// Mirrors backend compute_vehicle_capex — gross spend on NEW fleet capacity
+// this quarter, never reduced by same-quarter sell-backs (a same-quarter
+// buy+sell of the same type is a free relocation, $0 investment). Only used
+// for the offline DEMO_ID fallback.
+function computeVehicleCapex(deltas, vehicleConfig) {
+  var total = 0;
+  var allowMoving = state.scenario && state.scenario.allow_moving_vehicles;
+  Object.keys(deltas).forEach(function(vtype) {
+    var cfg = vehicleConfig[vtype];
+    if (!cfg) return;
+    var counts = deltas[vtype];
+    if (allowMoving) {
+      total += (counts.bought||0) * cfg.purchase_cost;
+    } else {
+      var net = (counts.bought||0) - (counts.sold||0);
+      if (net > 0) total += net * cfg.purchase_cost;
+    }
+  });
+  return total;
+}
+
 function adjustVehicle(whId, type, action) {
   var wh = state.placedWarehouses.filter(function(w){return w.id===whId;})[0];
   if (!wh) return;
@@ -1762,7 +2080,7 @@ function adjustVehicle(whId, type, action) {
     fetch(API+"/sessions/"+state.playId+"/vehicles",{
       method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({warehouse_id:whId,vehicle_type:type})
-    }).then(function(r){ return r.ok?r.json():r.json().then(function(e){throw e;}); })
+    }).then(function(r){ checkAuthResponse(r); return r.ok?r.json():r.json().then(function(e){throw e;}); })
       .then(function(d){
         if (!state.playId) return;
         wh.vehicles = d.vehicles;
@@ -1770,7 +2088,7 @@ function adjustVehicle(whId, type, action) {
         d.vehicles.forEach(function(v){ if(!v.is_sold) counts[v.type]=(counts[v.type]||0)+1; });
         refresh(d.cash_remaining, counts, d.pending_vehicle_net_cost);
       })
-      .catch(function(e){ showPanelError((e&&e.detail)||"Error buying vehicle."); });
+      .catch(function(e){ if (isAuthRequiredError(e)) return; showPanelError((e&&e.detail)||"Error buying vehicle."); });
 
   } else {
     // sell — find last unsold vehicle of this type
@@ -1802,14 +2120,14 @@ function adjustVehicle(whId, type, action) {
     fetch(API+"/sessions/"+state.playId+"/vehicles/sell",{
       method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({warehouse_id:whId,vehicle_id:targetVeh.id})
-    }).then(function(r){ return r.ok?r.json():r.json().then(function(e){throw e;}); })
+    }).then(function(r){ checkAuthResponse(r); return r.ok?r.json():r.json().then(function(e){throw e;}); })
       .then(function(d){
         if (!state.playId) return;
         targetVeh.is_sold = true;
         wh.vehicleCounts[type] = Math.max(0,(wh.vehicleCounts[type]||1)-1);
         refresh(d.cash_remaining, wh.vehicleCounts, d.pending_vehicle_net_cost);
       })
-      .catch(function(e){ showPanelError((e&&e.detail)||"Error selling vehicle."); });
+      .catch(function(e){ if (isAuthRequiredError(e)) return; showPanelError((e&&e.detail)||"Error selling vehicle."); });
   }
 }
 
@@ -1850,12 +2168,12 @@ function sellWarehouse(whId, confirmState) {
   fetch(API+"/sessions/"+state.playId+"/warehouses/sell",{
     method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({warehouse_id:whId})
-  }).then(function(r){ return r.ok?r.json():r.json().then(function(e){throw e;}); })
+  }).then(function(r){ checkAuthResponse(r); return r.ok?r.json():r.json().then(function(e){throw e;}); })
     .then(function(d){
       if (!state.playId) return;
       doSell(d.cash_remaining);
     })
-    .catch(function(e){ showPanelError((e&&e.detail)||"Error selling warehouse."); });
+    .catch(function(e){ if (isAuthRequiredError(e)) return; showPanelError((e&&e.detail)||"Error selling warehouse."); });
 }
 
 function closeWhPanel() {
@@ -1878,10 +2196,13 @@ function runQuarter() {
     return;
   }
 
+  if (isGateLocked()) return;
+
   var wasSetup = state.currentQuarter === 0;
   // Close warehouse panel if open
   document.getElementById("wh-panel").classList.remove("open");
   btn.disabled = true; btn.textContent = wasSetup ? "Starting..." : "Running...";
+  advanceInFlight = true;
 
   var quarterLabel = wasSetup ? 1 : state.currentQuarter;
   // Setup (Q0) has zero demand by design — nothing is actually delivered,
@@ -1905,12 +2226,14 @@ function runQuarter() {
   }
 
   function done(result) {
+    advanceInFlight = false;
     if (!state.playId) return;
     // Settle & reset the pending vehicle indicator — real backend already
     // folded this quarter's net vehicle cost into cash_after and returns
     // pending_vehicle_net_cost:0; demo mode needs its own ledger cleared.
     state.pendingVehicleNetCost = 0;
     state.demoPendingDeltas = {};
+    state.demoWarehouseCapex = 0;
 
     // Capture pre-sync active state so we can tell which warehouses became
     // active AS A RESULT of this specific quarter — used to show a clear
@@ -1955,6 +2278,9 @@ function runQuarter() {
       // no P&L entry and no results popup. Just move into Q1 and load its
       // revealed demand (visible for the first time) and updated build
       // status (a small warehouse may already be fully ready here).
+      // Capex spent during setup still counts as real investment — bucketed
+      // under "Start" on the investment chart since Q0 gets no results card.
+      state.startCapex = {warehouses: result.capex_warehouses||0, vehicles: result.capex_vehicles||0};
       updateHUD(); updateSidebar();
       fetchDemand();
       return;
@@ -1969,7 +2295,10 @@ function runQuarter() {
       urgent_stockouts:result.urgent_stockouts, nonurgent_stockouts:result.nonurgent_stockouts,
       urgent_fulfilled:result.urgent_fulfilled||0, nonurgent_fulfilled:result.nonurgent_fulfilled||0,
       warehouse_type_utilization:result.warehouse_type_utilization||{},
-      drone_cost:result.drone_cost||0, truck_cost:result.truck_cost||0});
+      drone_cost:result.drone_cost||0, truck_cost:result.truck_cost||0,
+      overhead_cost:result.overhead_cost||0, fleet_capacity:result.fleet_capacity||0,
+      capex_warehouses:result.capex_warehouses||0, capex_vehicles:result.capex_vehicles||0,
+      outsource_expenses:result.outsource_expenses||0, disruption_events:result.disruption_events||[]});
     updateHUD(); updateSidebar();
     renderRemainingDemand(result);
     if (state.completed) {
@@ -1987,7 +2316,9 @@ function runQuarter() {
       pendingResult = {revenue:0, operating_cost:0, profit:0, orders_fulfilled:0, orders_total:0,
         utilization_rate:0, serving_pct:0, stockouts:0, cash_after: state.cash-setupPendingCost,
         completed:false, next_quarter:1, quarter:0,
-        urgent_revenue:0, nonurgent_revenue:0, drone_utilization:0, truck_utilization:0, urgent_stockouts:0, nonurgent_stockouts:0};
+        urgent_revenue:0, nonurgent_revenue:0, drone_utilization:0, truck_utilization:0, urgent_stockouts:0, nonurgent_stockouts:0,
+        capex_warehouses: state.demoWarehouseCapex||0,
+        capex_vehicles: computeVehicleCapex(state.demoPendingDeltas||{}, state.scenario.vehicle_config)};
     } else {
       pendingResult = localSim();
     }
@@ -1995,10 +2326,12 @@ function runQuarter() {
     backendDone = true; tryFinish(); return;
   }
   fetch(API+"/sessions/"+state.playId+"/advance",{method:"POST"})
-    .then(function(r){ return r.ok?r.json():r.json().then(function(e){throw e;}); })
+    .then(function(r){ checkAuthResponse(r); return r.ok?r.json():r.json().then(function(e){throw e;}); })
     .then(function(result){ pendingResult = result; resultRef.value = result; backendDone = true; tryFinish(); })
     .catch(function(e){
       hideDeliveryOverlay();
+      advanceInFlight = false;
+      if (isAuthRequiredError(e)) { btn.disabled=false; btn.textContent = wasSetup ? "▶ Start Game" : "▶ Run Quarter"; return; }
       showGlobalError((e&&e.detail)||"Error advancing quarter.");
       btn.disabled=false;
       if (state.cash < 0) {
@@ -2014,7 +2347,7 @@ function runQuarter() {
 }
 
 function localSim() {
-  var sc=state.scenario, opCost=0, totU=0, totN=0;
+  var sc=state.scenario, opCost=0, droneCost=0, truckCost=0, overheadCost=0, totU=0, totN=0;
   var ranQuarter = state.currentQuarter > 0 ? state.currentQuarter : 1;
 
   var outsourced = state.outsourcedZones || [];
@@ -2068,13 +2401,14 @@ function localSim() {
       };
       whVehicles.push(entry);
       opCost += vc.operating_cost || 0;
-      if (v.type === "drone") droneCap += entry.capacity;
-      if (v.type === "truck") truckCap += entry.capacity;
+      if (v.type === "drone") { droneCap += entry.capacity; droneCost += vc.operating_cost || 0; }
+      if (v.type === "truck") { truckCap += entry.capacity; truckCost += vc.operating_cost || 0; }
     });
 
     var whCfg = sc.warehouse_config[wh.warehouseType] || {};
     var maxCap = whCfg.capacity || 0;
     whTypeCapacity[wh.warehouseType] += maxCap;
+    overheadCost += whCfg.overhead_cost || 0;
 
     activeWhs.push({
       id: wh.id,
@@ -2178,7 +2512,7 @@ function localSim() {
 
   var outsourceRev = outsourceUrgentRev + outsourceNonurgentRev;
   var rev = fu * sc.urgent_order_revenue + fn * sc.nonurgent_order_revenue + outsourceRev;
-  var combinedOpCost = opCost + outsourceExpenses;
+  var combinedOpCost = opCost + overheadCost + outsourceExpenses;
   var profit = rev - combinedOpCost;
   var total = totU + totN;
   var fulfilled = fu + fn + outsourceUrgentFulfilled + outsourceNonurgentFulfilled;
@@ -2197,6 +2531,9 @@ function localSim() {
     nonurgent_fulfilled: fn + outsourceNonurgentFulfilled,
     nonurgent_total: totN,
     utilization_rate: totalCap > 0 ? Math.min((fu + fn) / totalCap, 1) : 0,
+    fleet_capacity: totalCap,
+    capex_warehouses: state.demoWarehouseCapex||0,
+    capex_vehicles: computeVehicleCapex(state.demoPendingDeltas||{}, sc.vehicle_config),
     serving_pct: total > 0 ? Math.min(fulfilled / total, 1) : 0,
     stockouts: total - fulfilled,
     quarter: ranQuarter,
@@ -2207,9 +2544,12 @@ function localSim() {
     nonurgent_revenue: fn * sc.nonurgent_order_revenue + outsourceNonurgentRev,
     drone_utilization: droneCap > 0 ? droneUsed / droneCap : 0,
     truck_utilization: truckCap > 0 ? truckUsed / truckCap : 0,
+    drone_cost: droneCost,
+    truck_cost: truckCost,
     urgent_stockouts: totU - (fu + outsourceUrgentFulfilled),
     nonurgent_stockouts: totN - (fn + outsourceNonurgentFulfilled),
     warehouse_type_utilization: warehouseTypeUtilization,
+    overhead_cost: overheadCost,
     outsource_expenses: outsourceExpenses,
     outsource_revenue: outsourceRev
   };
@@ -2281,6 +2621,16 @@ function showResults(q, r, newlyActivated) {
       +'<span>'+names+' '+verb+' active \u2014 now serving.</span></div>';
   }
 
+  // Build disruption callout, same visual pattern as the activated-warehouse
+  // callout above, one line per event that fired and affected this play.
+  var disruptionHtml = "";
+  if (r.disruption_events && r.disruption_events.length) {
+    disruptionHtml = r.disruption_events.map(function(ev){
+      return '<div class="r-activated-callout" style="background:rgba(248,113,113,.1);border-color:rgba(248,113,113,.35);color:var(--red)">'
+        +'<span>'+escapeHtml(ev.message)+'</span></div>';
+    }).join("");
+  }
+
   // Build cards (compact for narrow sidebar)
   var pc = r.profit>=0 ? "var(--green)" : "var(--red)";
   var ps = r.profit>=0 ? "+" : "";
@@ -2314,8 +2664,10 @@ function showResults(q, r, newlyActivated) {
       +'<div class="r-val-sm" style="color:var(--red)">'+(r.urgent_stockouts||0).toLocaleString()+'</div></div>'
     +'<div class="r-card"><div class="r-label">Stockouts — Non-Urg.</div>'
       +'<div class="r-val-sm" style="color:var(--red)">'+(r.nonurgent_stockouts||0).toLocaleString()+'</div></div>'
-    +'<div class="r-card"><div class="r-label">Op. Cost</div>'
-      +'<div class="r-val-sm" style="color:var(--red)">$'+fmtK(r.operating_cost)+'</div></div>'
+    +'<div class="r-card"><div class="r-label">Op. Cost (Drone/Truck)</div>'
+      +'<div class="r-val-sm" style="color:var(--red)">$'+fmtK((r.operating_cost||0)-(r.overhead_cost||0))+'</div></div>'
+    +'<div class="r-card"><div class="r-label">Warehouse Overhead</div>'
+      +'<div class="r-val-sm" style="color:var(--red)">$'+fmtK(r.overhead_cost||0)+'</div></div>'
     +'<div class="r-card"><div class="r-label">Cash After</div>'
       +'<div class="r-val-sm">$'+fmtK(state.cash)+'</div></div>'
     +'<div class="r-card"><div class="r-label">Orders Served</div>'
@@ -2328,6 +2680,7 @@ function showResults(q, r, newlyActivated) {
       +'<div class="rsb-title">Q'+q+' Results</div>'
       +'<div class="rsb-sub">Quarter '+q+' of '+state.totalQuarters+' complete</div>'
       +activatedHtml
+      +disruptionHtml
       +'<div class="rsb-grid">'+cards+'</div>'
     +'</div>';
 
@@ -2383,6 +2736,60 @@ function showGameOver() {
     options: Object.assign({}, baseOpts, { scales: Object.assign({}, baseOpts.scales, {
       y: Object.assign({}, baseOpts.scales.y, { max: 100, ticks: Object.assign({}, baseOpts.scales.y.ticks, { callback: function(v){ return v+'%'; } }) })
     }) })
+  }));
+
+  // Chart 1b — Fleet Capacity (ceiling) vs Total Demand: shows in absolute
+  // orders/qtr whether fleet investment kept pace with demand growth. When
+  // the demand line pokes above the filled capacity area, that quarter was
+  // capacity-constrained (orders went unfulfilled or had to be outsourced).
+  goCharts.push(new Chart(document.getElementById('chart-capacity'), {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: 'Fleet Capacity', data: state.quarterlyResults.map(function(q){ return Math.round(q.fleet_capacity||0); }),
+          borderColor: '#60C8FF', backgroundColor: 'rgba(96,200,255,.18)', tension: 0.3, fill: true, pointRadius: 2, borderWidth: 2 },
+        { label: 'Total Demand', data: state.quarterlyResults.map(function(q){ return Math.round(q.orders_total||0); }),
+          borderColor: '#F87171', backgroundColor: 'rgba(248,113,113,0)', tension: 0.3, fill: false, pointRadius: 3, borderWidth: 2 }
+      ]
+    },
+    options: Object.assign({}, baseOpts, { scales: Object.assign({}, baseOpts.scales, {
+      y: Object.assign({}, baseOpts.scales.y, { ticks: Object.assign({}, baseOpts.scales.y.ticks, { callback: function(v){ return fmtK(v); } }) })
+    }) })
+  }));
+
+  // Chart 1c — Capacity investment over time: stacked bar of gross capital
+  // spend on warehouses vs vehicles each quarter, so students can see exactly
+  // WHEN they built capacity (as opposed to the ongoing operating/overhead
+  // costs already shown elsewhere). Prefixed with a 'Start' bar for capex
+  // spent during Q0 setup, mirroring the Cash Balance chart's Start point.
+  var investLabels = ['Start'].concat(labels);
+  var investWh = [state.startCapex ? (state.startCapex.warehouses||0) : 0].concat(
+    state.quarterlyResults.map(function(q){ return Math.round(q.capex_warehouses||0); })
+  );
+  var investVeh = [state.startCapex ? (state.startCapex.vehicles||0) : 0].concat(
+    state.quarterlyResults.map(function(q){ return Math.round(q.capex_vehicles||0); })
+  );
+  goCharts.push(new Chart(document.getElementById('chart-investment'), {
+    type: 'bar',
+    data: {
+      labels: investLabels,
+      datasets: [
+        { label: 'Warehouse Purchases', data: investWh,
+          backgroundColor: 'rgba(74,222,128,.75)', borderColor: '#4ADE80', borderWidth: 1 },
+        { label: 'Vehicle Purchases', data: investVeh,
+          backgroundColor: 'rgba(255,210,74,.75)', borderColor: '#FFD24A', borderWidth: 1 }
+      ]
+    },
+    options: Object.assign({}, baseOpts, {
+      scales: Object.assign({}, baseOpts.scales, {
+        x: Object.assign({}, baseOpts.scales.x, { stacked: true }),
+        y: Object.assign({}, baseOpts.scales.y, {
+          stacked: true,
+          ticks: Object.assign({}, baseOpts.scales.y.ticks, { callback: function(v){ return '$'+fmtK(v); } })
+        })
+      })
+    })
   }));
 
   // Chart 2 — Revenue per Quarter
@@ -2506,7 +2913,10 @@ function showGameOver() {
     })
   }));
 
-  // Chart 7 — Stacked spending breakdown: Drone vs Truck
+  // Chart 7 — Operating cost breakdown, stacked so the bars sum to exactly
+  // the "Operating Cost" line in the Revenue vs Spending chart: vehicle
+  // running costs (drone/truck), fixed warehouse overhead, and 3PL
+  // outsourcing expenses are the full set of components that make it up.
   goCharts.push(new Chart(document.getElementById('chart-spend-stack'), {
     type: 'bar',
     data: {
@@ -2517,7 +2927,13 @@ function showGameOver() {
           backgroundColor: 'rgba(96,200,255,.75)', borderColor: '#60C8FF', borderWidth: 1 },
         { label: 'Truck Cost',
           data: state.quarterlyResults.map(function(q){ return Math.round(q.truck_cost||0); }),
-          backgroundColor: 'rgba(255,210,74,.75)', borderColor: '#FFD24A', borderWidth: 1 }
+          backgroundColor: 'rgba(255,210,74,.75)', borderColor: '#FFD24A', borderWidth: 1 },
+        { label: 'Warehouse Overhead',
+          data: state.quarterlyResults.map(function(q){ return Math.round(q.overhead_cost||0); }),
+          backgroundColor: 'rgba(248,113,113,.75)', borderColor: '#F87171', borderWidth: 1 },
+        { label: 'Outsourcing (3PL)',
+          data: state.quarterlyResults.map(function(q){ return Math.round(q.outsource_expenses||0); }),
+          backgroundColor: 'rgba(255,154,60,.75)', borderColor: '#FF9A3C', borderWidth: 1 }
       ]
     },
     options: Object.assign({}, baseOpts, {
@@ -2525,6 +2941,32 @@ function showGameOver() {
         x: Object.assign({}, baseOpts.scales.x, { stacked: true }),
         y: Object.assign({}, baseOpts.scales.y, {
           stacked: true,
+          ticks: Object.assign({}, baseOpts.scales.y.ticks, { callback: function(v){ return '$'+fmtK(v); } })
+        })
+      })
+    })
+  }));
+
+  // Chart 8 — Cash balance over time (starting budget through each quarter's ending cash)
+  var cashLabels = ['Start'].concat(labels);
+  var cashData = [state.scenario.starting_budget||0].concat(
+    state.quarterlyResults.map(function(q){ return Math.round(q.cash_after||0); })
+  );
+  goCharts.push(new Chart(document.getElementById('chart-cash'), {
+    type: 'line',
+    data: {
+      labels: cashLabels,
+      datasets: [
+        { label: 'Cash Balance',
+          data: cashData,
+          borderColor: '#C084FC', backgroundColor: 'rgba(192,132,252,.12)',
+          tension: 0.3, fill: true, pointRadius: 3, borderWidth: 2 }
+      ]
+    },
+    options: Object.assign({}, baseOpts, {
+      scales: Object.assign({}, baseOpts.scales, {
+        y: Object.assign({}, baseOpts.scales.y, {
+          beginAtZero: false,
           ticks: Object.assign({}, baseOpts.scales.y.ticks, { callback: function(v){ return '$'+fmtK(v); } })
         })
       })
@@ -2552,6 +2994,35 @@ function updatePendingVehicleIndicator(netCost) {
   }
 }
 
+// Instructor-controlled pacing: a scenario's unlocked_quarter (0 = gating
+// off) caps which quarter a play may run/start next, shared across every
+// group on that scenario code — see routes.py advance_quarter for the
+// matching server-side check.
+function isGateLocked() {
+  if (state.playId === DEMO_ID) return false;
+  var sc = state.scenario;
+  if (!sc || !sc.unlocked_quarter) return false;
+  var target = state.currentQuarter === 0 ? 1 : state.currentQuarter;
+  return target > sc.unlocked_quarter;
+}
+
+function refreshGateStatus() {
+  if (!state.scenario || !state.scenario.code || state.completed) return;
+  var requestedCode = state.scenario.code;
+  fetch(API+"/scenarios/"+requestedCode)
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(data){
+      // Guard against a stale response landing after exitToHome()/a new
+      // initGame() switched to a different play — without re-checking the
+      // code, this would silently overwrite the new play's gate status with
+      // the old scenario's.
+      if (!data || !state.scenario || state.scenario.code !== requestedCode) return;
+      state.scenario.unlocked_quarter = data.unlocked_quarter;
+      updateHUD();
+    })
+    .catch(function(){});
+}
+
 function updateHUD() {
   document.getElementById("hud-quarter").textContent = state.currentQuarter===0
     ? "Setup"
@@ -2560,6 +3031,12 @@ function updateHUD() {
   var rSidebar = document.getElementById("results-sidebar");
   var isResultsOpen = rSidebar && rSidebar.classList.contains("show");
   var isLast = state.completed;
+
+  // A Run Quarter request is still in flight — leave its disabled state and
+  // "Running…"/"Starting…" text alone. Recomputing here (e.g. from the
+  // periodic gate-status poll) would re-enable the button before the
+  // response returns, letting a second click fire a concurrent /advance.
+  if (advanceInFlight) return;
 
   if (state.cash < 0) {
     runBtn.disabled = true;
@@ -2571,6 +3048,11 @@ function updateHUD() {
     runBtn.classList.remove("debt-blocked");
     runBtn.textContent = isLast ? "See Final Results ➔" : "Start Q" + state.currentQuarter + " ➔";
     runBtn.removeAttribute("title");
+  } else if (!isLast && isGateLocked()) {
+    runBtn.disabled = true;
+    runBtn.classList.remove("debt-blocked");
+    runBtn.textContent = "🔒 Waiting for Instructor";
+    runBtn.setAttribute("title", "The instructor hasn't unlocked this quarter yet.");
   } else {
     runBtn.disabled = false;
     runBtn.classList.remove("debt-blocked");

@@ -99,6 +99,9 @@
     .sc-code { font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 700; color: var(--accent); letter-spacing: .1em; }
     .sc-actions { display: flex; gap: 8px; }
     .sc-btn { padding: 5px 12px; font-size: 11px; }
+    .sc-gate { font-size: 11px; margin-top: 5px; display: flex; align-items: center; gap: 8px; }
+    .sc-gate-status { color: var(--muted); }
+    .sc-gate-status.on { color: var(--accent); }
 
     /* ── Toast ── */
     #toast {
@@ -303,6 +306,53 @@
           </div>
         </div>
       </div>
+      <!-- Random Disruption Events -->
+      <div class="card">
+        <div class="card-title">🌪️ Random Disruption Events</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Enable Random Disruption Events</label>
+            <div class="toggle-row">
+              <div class="toggle" id="sc_disruption_enabled" onclick="toggleEl(this)"></div>
+            </div>
+          </div>
+        </div>
+        <table class="config-table">
+          <thead>
+            <tr>
+              <th>Event</th>
+              <th>Enabled</th>
+              <th>Probability / qtr (%)</th>
+              <th>Severity Min (%)</th>
+              <th>Severity Max (%)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="pill">🌎 Earthquake — Warehouse Capacity</span></td>
+              <td><div class="toggle on" id="dis_earthquake_warehouse_enabled" onclick="toggleEl(this)"></div></td>
+              <td><input type="number" id="dis_earthquake_warehouse_probability" value="8" min="0" max="100" step="1"/></td>
+              <td><input type="number" id="dis_earthquake_warehouse_severity_min" value="20" min="0" max="100" step="5"/></td>
+              <td><input type="number" id="dis_earthquake_warehouse_severity_max" value="50" min="0" max="100" step="5"/></td>
+            </tr>
+            <tr>
+              <td><span class="pill">❄️ Harsh Winter — Drone Capacity</span></td>
+              <td><div class="toggle on" id="dis_harsh_winter_drone_enabled" onclick="toggleEl(this)"></div></td>
+              <td><input type="number" id="dis_harsh_winter_drone_probability" value="8" min="0" max="100" step="1"/></td>
+              <td><input type="number" id="dis_harsh_winter_drone_severity_min" value="20" min="0" max="100" step="5"/></td>
+              <td><input type="number" id="dis_harsh_winter_drone_severity_max" value="40" min="0" max="100" step="5"/></td>
+            </tr>
+            <tr>
+              <td><span class="pill">⛽ Fuel Price Hike — Truck Cost</span></td>
+              <td><div class="toggle on" id="dis_fuel_hike_truck_enabled" onclick="toggleEl(this)"></div></td>
+              <td><input type="number" id="dis_fuel_hike_truck_probability" value="8" min="0" max="100" step="1"/></td>
+              <td><input type="number" id="dis_fuel_hike_truck_severity_min" value="20" min="0" max="100" step="5"/></td>
+              <td><input type="number" id="dis_fuel_hike_truck_severity_max" value="60" min="0" max="100" step="5"/></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="forecast-note" style="margin-top:8px">Each enabled event rolls independently every quarter. Shared across every group under this scenario code — same quarter, same event, same severity for everyone; an earthquake's warehouse-capacity hit only actually affects a group if they have a warehouse at the targeted map slot.</div>
+      </div>
       <!-- Warehouses -->
       <div class="card">
         <div class="card-title">Warehouse Configuration <span class="pill pill-w">3 types</span></div>
@@ -313,6 +363,7 @@
               <th>Purchase Cost ($)</th>
               <th>Capacity (orders/qtr)</th>
               <th>Build Time (qtrs)</th>
+              <th>Overhead ($/qtr)</th>
               <th>Sell-Back ($)</th>
             </tr>
           </thead>
@@ -322,6 +373,7 @@
               <td><input type="number" id="wh_small_cost" value="250000" step="10000"/></td>
               <td><input type="number" id="wh_small_cap" value="500" step="50"/></td>
               <td><input type="number" id="wh_small_build" value="1" min="0" max="8"/></td>
+              <td><input type="number" id="wh_small_overhead" value="20000" step="5000"/></td>
               <td><input type="number" id="wh_small_sell" value="125000" step="10000"/></td>
             </tr>
             <tr>
@@ -329,6 +381,7 @@
               <td><input type="number" id="wh_med_cost" value="500000" step="10000"/></td>
               <td><input type="number" id="wh_med_cap" value="1200" step="50"/></td>
               <td><input type="number" id="wh_med_build" value="2" min="0" max="8"/></td>
+              <td><input type="number" id="wh_med_overhead" value="30000" step="5000"/></td>
               <td><input type="number" id="wh_med_sell" value="250000" step="10000"/></td>
             </tr>
             <tr>
@@ -336,6 +389,7 @@
               <td><input type="number" id="wh_large_cost" value="800000" step="10000"/></td>
               <td><input type="number" id="wh_large_cap" value="2500" step="50"/></td>
               <td><input type="number" id="wh_large_build" value="4" min="0" max="8"/></td>
+              <td><input type="number" id="wh_large_overhead" value="40000" step="5000"/></td>
               <td><input type="number" id="wh_large_sell" value="400000" step="10000"/></td>
             </tr>
           </tbody>
@@ -421,7 +475,7 @@
         <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
           <div style="position:relative; flex:1; min-width:200px;">
             <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;">🔍</span>
-            <input type="text" id="plays-search" placeholder="Search by student name, play ID, or scenario code…"
+            <input type="text" id="plays-search" placeholder="Search by student name, group name, play ID, or scenario code…"
               style="width:100%;padding-left:32px;"
               oninput="filterPlays()"/>
           </div>
@@ -480,6 +534,12 @@
 <script>
   const API = "/api";
 
+  function escapeHtml(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+  }
+
   const FAKE_SCENARIOS = [
     { id: 1, code: "RUSH42", name: "Spring 2025 — Week 4: Intro to Warehousing", quarters: 16, budget: "$3,000,000", students: 24, created: "Jun 2, 2025" },
     { id: 2, code: "LOG7X2", name: "Fall 2025 — Advanced Demand Planning",        quarters: 20, budget: "$2,000,000", students: 18, created: "Jun 8, 2025" },
@@ -487,6 +547,7 @@
   ];
 
   let savedScenarios = JSON.parse(localStorage.getItem("sr_scenarios") || "null") ?? FAKE_SCENARIOS;
+  const gateUpdatesInFlight = new Set(); // scenario codes with a PUT quarter-gate request in flight, to block double-click resubmits
 
   // ── Navigation ────────────────────────────────────────────────────────────
   function showPage(id) {
@@ -516,9 +577,9 @@
       demand_reveal_start_quarter: +document.getElementById("sc_reveal_start").value,
       warehouse_service_radius: +document.getElementById("sc_service_radius").value,
       warehouse_config: {
-        small:  { purchase_cost: +document.getElementById("wh_small_cost").value,  capacity: +document.getElementById("wh_small_cap").value,  build_quarters: +document.getElementById("wh_small_build").value,  sell_back: +document.getElementById("wh_small_sell").value },
-        medium: { purchase_cost: +document.getElementById("wh_med_cost").value,    capacity: +document.getElementById("wh_med_cap").value,    build_quarters: +document.getElementById("wh_med_build").value,    sell_back: +document.getElementById("wh_med_sell").value   },
-        large:  { purchase_cost: +document.getElementById("wh_large_cost").value,  capacity: +document.getElementById("wh_large_cap").value,  build_quarters: +document.getElementById("wh_large_build").value,  sell_back: +document.getElementById("wh_large_sell").value },
+        small:  { purchase_cost: +document.getElementById("wh_small_cost").value,  capacity: +document.getElementById("wh_small_cap").value,  build_quarters: +document.getElementById("wh_small_build").value,  sell_back: +document.getElementById("wh_small_sell").value,  overhead_cost: +document.getElementById("wh_small_overhead").value },
+        medium: { purchase_cost: +document.getElementById("wh_med_cost").value,    capacity: +document.getElementById("wh_med_cap").value,    build_quarters: +document.getElementById("wh_med_build").value,    sell_back: +document.getElementById("wh_med_sell").value,    overhead_cost: +document.getElementById("wh_med_overhead").value },
+        large:  { purchase_cost: +document.getElementById("wh_large_cost").value,  capacity: +document.getElementById("wh_large_cap").value,  build_quarters: +document.getElementById("wh_large_build").value,  sell_back: +document.getElementById("wh_large_sell").value,  overhead_cost: +document.getElementById("wh_large_overhead").value },
       },
       vehicle_config: {
         truck: { purchase_cost: +document.getElementById("v_truck_cost").value, operating_cost: +document.getElementById("v_truck_op").value, capacity: +document.getElementById("v_truck_cap").value, sell_back: +document.getElementById("v_truck_sell").value, serves_urgent: isOn("v_truck_urgent"), serves_nonurgent: isOn("v_truck_nonurgent") },
@@ -533,6 +594,26 @@
       outsource_cost_nonurgent: +document.getElementById("sc_outsource_cost_nonurgent").value,
       warehouse_slots: [],
       demand_zone_positions: [],
+      disruption_config: collectDisruptionConfig(),
+    };
+  }
+
+  function collectDisruptionConfig() {
+    function eventCfg(key) {
+      return {
+        enabled:      isOn("dis_" + key + "_enabled"),
+        probability:  +document.getElementById("dis_" + key + "_probability").value / 100,
+        severity_min: +document.getElementById("dis_" + key + "_severity_min").value / 100,
+        severity_max: +document.getElementById("dis_" + key + "_severity_max").value / 100,
+      };
+    }
+    return {
+      enabled: isOn("sc_disruption_enabled"),
+      events: {
+        earthquake_warehouse: eventCfg("earthquake_warehouse"),
+        harsh_winter_drone:   eventCfg("harsh_winter_drone"),
+        fuel_hike_truck:      eventCfg("fuel_hike_truck"),
+      },
     };
   }
 
@@ -583,6 +664,15 @@
             <div style="flex:1">
               <div class="sc-name">${sc.name}</div>
               <div class="sc-meta">${sc.total_quarters} quarters &nbsp;·&nbsp; $${sc.starting_budget.toLocaleString()} budget &nbsp;·&nbsp; Created ${createdDate}</div>
+              <div class="sc-gate">
+                ${sc.unlocked_quarter > 0
+                  ? `<span class="sc-gate-status on">🔓 Unlocked through Q${sc.unlocked_quarter}</span>
+                     <button class="btn btn-secondary sc-btn" ${gateUpdatesInFlight.has(sc.code) ? "disabled" : ""} onclick="unlockNextQuarter('${sc.code}', ${sc.unlocked_quarter})">Unlock Next Quarter</button>
+                     <button class="btn btn-secondary sc-btn" ${gateUpdatesInFlight.has(sc.code) ? "disabled" : ""} onclick="setQuarterGate('${sc.code}', 0)">Disable Gating</button>`
+                  : `<span class="sc-gate-status">🔒 Quarter gating off — groups advance freely</span>
+                     <button class="btn btn-secondary sc-btn" ${gateUpdatesInFlight.has(sc.code) ? "disabled" : ""} onclick="setQuarterGate('${sc.code}', 1)">Enable Quarter Gating</button>`
+                }
+              </div>
             </div>
             <div class="sc-code" style="margin: 0 24px">${sc.code}</div>
             <div class="sc-actions">
@@ -615,10 +705,39 @@
     }
   }
 
+  async function setQuarterGate(code, unlockedQuarter) {
+    if (gateUpdatesInFlight.has(code)) return; // already updating this scenario's gate — ignore the double-click/second tab
+    gateUpdatesInFlight.add(code);
+    renderScenarioList();
+    try {
+      const res = await fetch(`${API}/scenarios/${code}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ unlocked_quarter: unlockedQuarter }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      showToast(unlockedQuarter > 0 ? `Quarter gating enabled — Q1 unlocked` : `Quarter gating disabled — groups can advance freely`);
+    } catch (e) {
+      console.error("[Supply Rush] Failed to update quarter gate:", e);
+      showToast("Couldn't update quarter gate. Check the backend connection.");
+    } finally {
+      gateUpdatesInFlight.delete(code);
+      renderScenarioList();
+    }
+  }
+
+  async function unlockNextQuarter(code, currentUnlocked) {
+    await setQuarterGate(code, currentUnlocked + 1);
+  }
+
   async function deleteScenario(code, fallbackId) {
     if (!confirm(`Delete scenario ${code}?`)) return;
     try {
-      await fetch(`${API}/scenarios/${code}`, { method: "DELETE" });
+      const res = await fetch(`${API}/scenarios/${code}`, { method: "DELETE" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || `HTTP ${res.status}`);
+      }
       if (fallbackId !== undefined) {
         savedScenarios = savedScenarios.filter(s => s.id !== fallbackId);
         localStorage.setItem("sr_scenarios", JSON.stringify(savedScenarios));
@@ -682,7 +801,7 @@
       if (status === "active"    &&  p.completed) return false;
       if (status === "completed" && !p.completed) return false;
       if (search) {
-        const haystack = [p.play_id, p.student_name||"", p.scenario_code||""].join(" ").toLowerCase();
+        const haystack = [p.play_id, p.student_name||"", p.scenario_code||"", p.group_name||""].join(" ").toLowerCase();
         if (!haystack.includes(search)) return false;
       }
       return true;
@@ -715,9 +834,14 @@
 
       const qBar = `Q${p.current_quarter}/${p.total_quarters}`;
 
+      const emails = p.member_emails || [];
+      const studentHtml = p.group_name
+        ? `<div>${escapeHtml(p.group_name)}</div><div style="font-size:11px;color:var(--muted)" title="${escapeHtml(emails.join(', '))}">${emails.length} verified student${emails.length===1?'':'s'}</div>`
+        : (p.student_name ? escapeHtml(p.student_name) : '<span style="color:var(--muted)">Anonymous</span>');
+
       return `<tr style="cursor:pointer;" onclick="showPlayDetails('${p.play_id}')" title="Click to view detailed play report">
         <td><span class="play-id">${p.play_id}</span></td>
-        <td>${p.student_name || '<span style="color:var(--muted)">Anonymous</span>'}</td>
+        <td>${studentHtml}</td>
         <td>${scHtml}</td>
         <td style="color:var(--muted)">${qBar}</td>
         <td style="font-weight:600">${fmt$(p.cash)}</td>
@@ -835,12 +959,23 @@
         `;
       }
 
+      const identityHtml = play.group_name
+        ? `<div>
+            <label style="display:block;margin-bottom:2px;">Group Name</label>
+            <span style="font-size:15px;font-weight:600;">${escapeHtml(play.group_name)}</span>
+          </div>
+          <div>
+            <label style="display:block;margin-bottom:2px;">Verified Members</label>
+            <span style="font-size:15px;font-weight:600;" title="${escapeHtml((play.member_emails||[]).join(', '))}">${(play.member_emails||[]).length} student${(play.member_emails||[]).length===1?'':'s'}</span>
+          </div>`
+        : `<div>
+            <label style="display:block;margin-bottom:2px;">Student Name</label>
+            <span style="font-size:15px;font-weight:600;">${play.student_name ? escapeHtml(play.student_name) : 'Anonymous'}</span>
+          </div>`;
+
       body.innerHTML = `
         <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;display:flex;flex-wrap:wrap;gap:24px;align-items:center;">
-          <div>
-            <label style="display:block;margin-bottom:2px;">Student Name</label>
-            <span style="font-size:15px;font-weight:600;">${play.student_name || 'Anonymous'}</span>
-          </div>
+          ${identityHtml}
           <div>
             <label style="display:block;margin-bottom:2px;">Scenario Mode</label>
             <span style="font-size:15px;font-weight:600;">${play.scenario_code ? play.scenario_code : 'Normal Play'}</span>
@@ -912,16 +1047,19 @@
     document.getElementById("wh_small_cap").value = "500";
     document.getElementById("wh_small_build").value = "1";
     document.getElementById("wh_small_sell").value = "125000";
-    
+    document.getElementById("wh_small_overhead").value = "20000";
+
     document.getElementById("wh_med_cost").value = "500000";
     document.getElementById("wh_med_cap").value = "1200";
     document.getElementById("wh_med_build").value = "2";
     document.getElementById("wh_med_sell").value = "250000";
-    
+    document.getElementById("wh_med_overhead").value = "30000";
+
     document.getElementById("wh_large_cost").value = "800000";
     document.getElementById("wh_large_cap").value = "2500";
     document.getElementById("wh_large_build").value = "4";
     document.getElementById("wh_large_sell").value = "400000";
+    document.getElementById("wh_large_overhead").value = "40000";
 
     document.getElementById("v_truck_cost").value = "20000";
     document.getElementById("v_truck_op").value = "800";
@@ -945,6 +1083,20 @@
     document.getElementById("sc_allow_outsourcing").classList.remove("on");
     document.getElementById("sc_outsource_cost_urgent").value = "75";
     document.getElementById("sc_outsource_cost_nonurgent").value = "40";
+
+    document.getElementById("sc_disruption_enabled").classList.remove("on");
+    document.getElementById("dis_earthquake_warehouse_enabled").classList.add("on");
+    document.getElementById("dis_earthquake_warehouse_probability").value = "8";
+    document.getElementById("dis_earthquake_warehouse_severity_min").value = "20";
+    document.getElementById("dis_earthquake_warehouse_severity_max").value = "50";
+    document.getElementById("dis_harsh_winter_drone_enabled").classList.add("on");
+    document.getElementById("dis_harsh_winter_drone_probability").value = "8";
+    document.getElementById("dis_harsh_winter_drone_severity_min").value = "20";
+    document.getElementById("dis_harsh_winter_drone_severity_max").value = "40";
+    document.getElementById("dis_fuel_hike_truck_enabled").classList.add("on");
+    document.getElementById("dis_fuel_hike_truck_probability").value = "8";
+    document.getElementById("dis_fuel_hike_truck_severity_min").value = "20";
+    document.getElementById("dis_fuel_hike_truck_severity_max").value = "60";
   }
 </script>
 </body>

@@ -5,6 +5,8 @@ schemas.py — Pydantic request & response models
 import json
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, validator
+from game_logic import DEFAULT_DISRUPTION_CONFIG
+from models import DEFAULT_WAREHOUSE_CONFIG, DEFAULT_VEHICLE_CONFIG
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -15,6 +17,16 @@ class WarehouseTypeConfig(BaseModel):
     capacity:        int
     build_quarters:  int
     sell_back:       float
+    overhead_cost:   float = 0.0
+
+    @validator("overhead_cost")
+    def _overhead_cost_non_negative(cls, v):
+        # simulate_quarter subtracts this from operating_cost every quarter
+        # for every active warehouse of this type — a negative value would
+        # silently inflate profit with no error anywhere in the request path.
+        if v < 0:
+            raise ValueError("overhead_cost must be >= 0")
+        return v
 
 
 class VehicleTypeConfig(BaseModel):
@@ -32,6 +44,57 @@ class MapSlot(BaseModel):
     y:  float   # percentage 0–100
 
 
+class DisruptionEventConfig(BaseModel):
+    enabled:      bool  = True
+    probability:  float = 0.08   # chance this event fires in a given quarter, 0–1
+    severity_min: float = 0.2
+    severity_max: float = 0.5
+
+    @validator("probability")
+    def _probability_in_range(cls, v):
+        if not (0 <= v <= 1):
+            raise ValueError("probability must be between 0 and 1")
+        return v
+
+    @validator("severity_min")
+    def _severity_min_in_range(cls, v):
+        if not (0 <= v <= 1):
+            raise ValueError("severity_min must be between 0 and 1")
+        return v
+
+    @validator("severity_max")
+    def _severity_max_in_range_and_at_least_min(cls, v, values):
+        if not (0 <= v <= 1):
+            raise ValueError("severity_max must be between 0 and 1")
+        lo = values.get("severity_min")
+        if lo is not None and v < lo:
+            raise ValueError("severity_max must be >= severity_min")
+        return v
+
+
+class DisruptionConfig(BaseModel):
+    """Master switch plus per-event-type tuning. See game_logic.DISRUPTION_EVENT_TYPES
+    for the fixed set of event keys this dict may contain."""
+    enabled: bool = DEFAULT_DISRUPTION_CONFIG["enabled"]
+    events: Dict[str, DisruptionEventConfig] = {
+        key: DisruptionEventConfig(**cfg) for key, cfg in DEFAULT_DISRUPTION_CONFIG["events"].items()
+    }
+
+    @validator("events")
+    def _backfill_missing_event_types(cls, v):
+        # A caller submitting `events` with only some of the known keys (e.g.
+        # the instructor dashboard always sends all three, but a direct API
+        # call might not) would otherwise silently disable the omitted event
+        # types going forward — roll_disruption_events() just skips whatever
+        # key isn't present. Missing keys fall back to their documented
+        # defaults instead of quietly dropping out of rotation.
+        merged = dict(v)
+        for key, cfg in DEFAULT_DISRUPTION_CONFIG["events"].items():
+            if key not in merged:
+                merged[key] = DisruptionEventConfig(**cfg)
+        return merged
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  SCENARIO schemas
 # ─────────────────────────────────────────────────────────────────────────────
@@ -41,14 +104,11 @@ class ScenarioCreate(BaseModel):
     starting_budget: float = 3_000_000.0
 
     warehouse_config: Dict[str, WarehouseTypeConfig] = {
-        "small":  WarehouseTypeConfig(purchase_cost=250_000, capacity=500,  build_quarters=1, sell_back=125_000),
-        "medium": WarehouseTypeConfig(purchase_cost=500_000, capacity=1200, build_quarters=2, sell_back=250_000),
-        "large":  WarehouseTypeConfig(purchase_cost=800_000, capacity=2500, build_quarters=4, sell_back=400_000),
+        key: WarehouseTypeConfig(**cfg) for key, cfg in DEFAULT_WAREHOUSE_CONFIG.items()
     }
 
     vehicle_config: Dict[str, VehicleTypeConfig] = {
-        "truck": VehicleTypeConfig(purchase_cost=20_000,  operating_cost=800, capacity=200, sell_back=12_000,  serves_urgent=False, serves_nonurgent=True),
-        "drone": VehicleTypeConfig(purchase_cost=9_000,   operating_cost=800, capacity=60,  sell_back=5_400,   serves_urgent=True,  serves_nonurgent=True),
+        key: VehicleTypeConfig(**cfg) for key, cfg in DEFAULT_VEHICLE_CONFIG.items()
     }
 
     urgent_order_revenue:    float = 55.0
@@ -66,9 +126,29 @@ class ScenarioCreate(BaseModel):
     outsource_cost_urgent:    float = 75.0
     outsource_cost_nonurgent: float = 40.0
     allow_moving_vehicles:    bool = False
+    unlocked_quarter:         int = 0
 
     warehouse_slots:       List[MapSlot] = []
     demand_zone_positions: List[MapSlot] = []
+
+    disruption_config: DisruptionConfig = DisruptionConfig()
+
+    @validator("demand_max_per_zone")
+    def _demand_max_at_least_min(cls, v, values):
+        lo = values.get("demand_min_per_zone")
+        if lo is not None and v < lo:
+            raise ValueError("demand_max_per_zone must be >= demand_min_per_zone")
+        return v
+
+    @validator("unlocked_quarter")
+    def _unlocked_quarter_non_negative(cls, v):
+        # advance_quarter's gate check (`sc.unlocked_quarter and target_quarter >
+        # sc.unlocked_quarter`) treats any negative value as truthy-and-always-
+        # exceeded, permanently locking every play under the scenario with no
+        # dashboard control able to set it back to a valid value.
+        if v is not None and v < 0:
+            raise ValueError("unlocked_quarter must be >= 0")
+        return v
 
 
 class ScenarioUpdate(ScenarioCreate):
@@ -92,8 +172,10 @@ class ScenarioUpdate(ScenarioCreate):
     outsource_cost_urgent:    Optional[float] = None
     outsource_cost_nonurgent: Optional[float] = None
     allow_moving_vehicles:    Optional[bool] = None
+    unlocked_quarter:         Optional[int]  = None
     warehouse_slots:          Optional[List[MapSlot]] = None
     demand_zone_positions:    Optional[List[MapSlot]] = None
+    disruption_config:        Optional[DisruptionConfig] = None
 
 
 class ScenarioOut(BaseModel):
@@ -122,9 +204,12 @@ class ScenarioOut(BaseModel):
     outsource_cost_urgent:    float
     outsource_cost_nonurgent: float
     allow_moving_vehicles:    bool
+    unlocked_quarter:         int
 
     warehouse_slots:       List[Any]
     demand_zone_positions: List[Any]
+
+    disruption_config: Dict[str, Any]
 
     class Config:
         from_attributes = True
@@ -155,8 +240,10 @@ class ScenarioOut(BaseModel):
             outsource_cost_urgent=getattr(obj, "outsource_cost_urgent", 75.0),
             outsource_cost_nonurgent=getattr(obj, "outsource_cost_nonurgent", 40.0),
             allow_moving_vehicles=getattr(obj, "allow_moving_vehicles", False),
+            unlocked_quarter=getattr(obj, "unlocked_quarter", 0),
             warehouse_slots=json.loads(obj.warehouse_slots),
             demand_zone_positions=json.loads(obj.demand_zone_positions),
+            disruption_config=json.loads(getattr(obj, "disruption_config", None) or json.dumps(DEFAULT_DISRUPTION_CONFIG)),
         )
 
 
@@ -166,11 +253,24 @@ class ScenarioOut(BaseModel):
 class PlayCreate(BaseModel):
     scenario_code: str           # student enters this
     student_name:  Optional[str] = None
+    group_name:    Optional[str] = None   # required when student verification is on
 
 
 class OutsourceZoneRequest(BaseModel):
     zone_id:    str
     outsourced: bool
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  AUTH schemas
+# ─────────────────────────────────────────────────────────────────────────────
+class EmailCodeRequest(BaseModel):
+    email: str
+
+
+class EmailCodeVerify(BaseModel):
+    email: str
+    code:  str
 
 
 # ─────────────────────────────────────────────────────────────────────────────

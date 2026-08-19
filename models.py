@@ -4,9 +4,23 @@ models.py — All database tables for Supply Rush
 
 import json
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, Float, String, Boolean, DateTime, Text, ForeignKey
+from sqlalchemy import Column, Integer, Float, String, Boolean, DateTime, Text, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from database import Base
+from game_logic import DEFAULT_DISRUPTION_CONFIG
+
+# Single source of truth for default warehouse/vehicle economics — imported
+# by routes.py's Normal Mode self-heal so it can never drift from the
+# Column defaults declared below.
+DEFAULT_WAREHOUSE_CONFIG = {
+    "small":  {"purchase_cost": 250_000, "capacity": 500,  "build_quarters": 1, "sell_back": 125_000, "overhead_cost": 20_000},
+    "medium": {"purchase_cost": 500_000, "capacity": 1200, "build_quarters": 2, "sell_back": 250_000, "overhead_cost": 30_000},
+    "large":  {"purchase_cost": 800_000, "capacity": 2500, "build_quarters": 4, "sell_back": 400_000, "overhead_cost": 40_000},
+}
+DEFAULT_VEHICLE_CONFIG = {
+    "truck": {"purchase_cost": 20_000,  "operating_cost": 800, "capacity": 200, "sell_back": 12_000,  "serves_urgent": False, "serves_nonurgent": True},
+    "drone": {"purchase_cost": 9_000,   "operating_cost": 800, "capacity": 60,  "sell_back": 5_400,   "serves_urgent": True,  "serves_nonurgent": True},
+}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -25,17 +39,10 @@ class Scenario(Base):
     starting_budget = Column(Float,   default=3_000_000.0)
 
     # ── Warehouse costs & specs ───────────────────────────────────────────────
-    warehouse_config = Column(Text, default=json.dumps({
-        "small":  {"purchase_cost": 250_000, "capacity": 500,  "build_quarters": 1, "sell_back": 125_000},
-        "medium": {"purchase_cost": 500_000, "capacity": 1200, "build_quarters": 2, "sell_back": 250_000},
-        "large":  {"purchase_cost": 800_000, "capacity": 2500, "build_quarters": 4, "sell_back": 400_000},
-    }))
+    warehouse_config = Column(Text, default=lambda: json.dumps(DEFAULT_WAREHOUSE_CONFIG))
 
     # ── Vehicle costs & specs ─────────────────────────────────────────────────
-    vehicle_config = Column(Text, default=json.dumps({
-        "truck": {"purchase_cost": 20_000,  "operating_cost": 800, "capacity": 200, "sell_back": 12_000,  "serves_urgent": False, "serves_nonurgent": True},
-        "drone": {"purchase_cost": 9_000,   "operating_cost": 800, "capacity": 60,  "sell_back": 5_400,   "serves_urgent": True,  "serves_nonurgent": True},
-    }))
+    vehicle_config = Column(Text, default=lambda: json.dumps(DEFAULT_VEHICLE_CONFIG))
 
     # ── Order pricing ─────────────────────────────────────────────────────────
     urgent_order_revenue    = Column(Float, default=55.0)
@@ -46,8 +53,9 @@ class Scenario(Base):
     demand_max_per_zone  = Column(Integer, default=532)
     urgent_demand_ratio  = Column(Float,   default=0.3)
 
-    # Fixed demand zone reveal system:
-    # 60% of demand_zone_positions is randomly selected per play; 70% of that
+    # Fixed demand zone reveal system (see game_logic.ZONE_SELECTION_RATIO /
+    # INITIAL_REVEAL_RATIO for the actual tunable constants): currently 60%
+    # of demand_zone_positions is randomly selected per play; 50% of that
     # selection is revealed at Quarter 0, the rest reveal evenly starting at
     # this configurable quarter through the end of the game.
     demand_reveal_start_quarter = Column(Integer, default=6)
@@ -70,9 +78,21 @@ class Scenario(Base):
     outsource_cost_nonurgent = Column(Float, default=40.0, nullable=False)
     allow_moving_vehicles    = Column(Boolean, default=False, nullable=False)
 
+    # ── Quarter gating (instructor-controlled pacing) ─────────────────────────
+    # 0 = gating disabled, every play under this scenario code advances freely.
+    # N >= 1 = students may run/start any quarter up to and including N; the
+    # instructor raises N (via the dashboard) to release the next quarter for
+    # every group sharing this scenario code at once.
+    unlocked_quarter = Column(Integer, default=0, nullable=False)
+
     # ── Map layout ────────────────────────────────────────────────────────────
     warehouse_slots       = Column(Text, default=json.dumps([]))  # [{id, x, y}, ...]
     demand_zone_positions = Column(Text, default=json.dumps([]))  # [{id, x, y}, ...]
+
+    # ── Random disruption events ──────────────────────────────────────────────
+    # Off by default — see game_logic.roll_disruption_events /
+    # DEFAULT_DISRUPTION_CONFIG for the shape and the built-in event types.
+    disruption_config = Column(Text, default=json.dumps(DEFAULT_DISRUPTION_CONFIG))
 
     # ── Relationships ─────────────────────────────────────────────────────────
     plays = relationship("Play", back_populates="scenario")
@@ -96,6 +116,11 @@ class Play(Base):
     scenario_code   = Column(String(8),  nullable=True, index=True)                # null = normal mode
     scenario_id     = Column(Integer, ForeignKey("scenarios.id"), nullable=True)   # null = normal mode
     student_name    = Column(String(120), nullable=True)
+    # Free-text group identifier a student enters alongside the scenario code.
+    # Every student who enters the same (scenario_id, group_name) pair (case-
+    # insensitive match) lands in this same shared play — see PlayMember for
+    # the verified-email membership list. Null for normal mode (no groups).
+    group_name      = Column(String(120), nullable=True, index=True)
     started_at      = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     current_quarter = Column(Integer, default=0)   # 0 = setup phase, no demand/simulation; 1..total_quarters = play
     cash            = Column(Float, nullable=False)
@@ -124,6 +149,14 @@ class Play(Base):
     pending_vehicle_deltas = Column(Text, default=json.dumps({}))
     outsourced_zones       = Column(Text, default=json.dumps([]))
 
+    # Capital spend during Q0 setup (warehouses/vehicles bought before the
+    # game's first real quarter, settled at the Q0->Q1 "Start Game" advance
+    # call). Q0 never gets its own QuarterResult row, so this is the only
+    # durable record of that spend — needed so the investment chart's "Start"
+    # bucket survives a page refresh/reconnect instead of resetting to 0.
+    setup_capex_warehouses = Column(Float, default=0.0, nullable=False)
+    setup_capex_vehicles   = Column(Float, default=0.0, nullable=False)
+
     # Bundled quarterly results for fast reads — kept in sync with QuarterResult table
     # Format: [ { quarter, revenue, operating_cost, profit, cash_after,
     #             orders_fulfilled, orders_total, utilization_rate, serving_pct, stockouts }, ... ]
@@ -133,6 +166,7 @@ class Play(Base):
     scenario   = relationship("Scenario",        back_populates="plays")
     warehouses = relationship("PlacedWarehouse", back_populates="play")
     quarters   = relationship("QuarterResult",   back_populates="play")
+    members    = relationship("PlayMember",      back_populates="play")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -141,13 +175,14 @@ class Play(Base):
 class PlacedWarehouse(Base):
     __tablename__ = "placed_warehouses"
 
-    id               = Column(Integer, primary_key=True, index=True)
-    play_id_fk       = Column(Integer, ForeignKey("plays.id"), nullable=False)
-    slot_id          = Column(String(20), nullable=False)   # matches warehouse_slots[].id
-    warehouse_type   = Column(String(10), nullable=False)   # small / medium / large
-    built_at_quarter = Column(Integer, nullable=False)
-    is_active        = Column(Boolean, default=False)       # False while still building
-    is_sold          = Column(Boolean, default=False)
+    id                  = Column(Integer, primary_key=True, index=True)
+    play_id_fk          = Column(Integer, ForeignKey("plays.id"), nullable=False)
+    slot_id             = Column(String(20), nullable=False)   # matches warehouse_slots[].id
+    warehouse_type      = Column(String(10), nullable=False)   # small / medium / large
+    built_at_quarter    = Column(Integer, nullable=False)
+    is_active           = Column(Boolean, default=False)       # False while still building
+    is_sold             = Column(Boolean, default=False)
+    purchase_price_paid = Column(Float, nullable=True)          # cash actually deducted at purchase time
 
     # [{type: "truck"|"drone", purchased_at: Q, is_sold: false}, ...]
     vehicles = Column(Text, default=json.dumps([]))
@@ -160,6 +195,9 @@ class PlacedWarehouse(Base):
 # ─────────────────────────────────────────────────────────────────────────────
 class QuarterResult(Base):
     __tablename__ = "quarter_results"
+    __table_args__ = (
+        UniqueConstraint("play_id_fk", "quarter", name="uq_quarter_results_play_quarter"),
+    )
 
     id         = Column(Integer, primary_key=True, index=True)
     play_id_fk = Column(Integer, ForeignKey("plays.id"), nullable=False)
@@ -198,4 +236,57 @@ class QuarterResult(Base):
     drone_cost          = Column(Float, default=0.0)
     truck_cost          = Column(Float, default=0.0)
 
+    # Warehouse overhead cost breakdown (fixed cost per active warehouse per quarter)
+    overhead_cost       = Column(Float, default=0.0)
+
+    # Random disruption events that fired THIS quarter and actually affected
+    # this play (see game_logic.roll_disruption_events / events_affecting_play).
+    # Persisted so a later instructor edit to Scenario.disruption_config never
+    # rewrites what already happened. Format: [{key, kind, severity, message}, ...]
+    disruption_events   = Column(Text, default=json.dumps([]))
+
     play = relationship("Play", back_populates="quarters")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  PLAY MEMBER  (verified students who have joined a shared group play)
+# ─────────────────────────────────────────────────────────────────────────────
+class PlayMember(Base):
+    __tablename__ = "play_members"
+
+    id         = Column(Integer, primary_key=True, index=True)
+    play_id_fk = Column(Integer, ForeignKey("plays.id"), nullable=False, index=True)
+    email      = Column(String(255), nullable=False, index=True)
+    joined_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    play = relationship("Play", back_populates="members")
+
+    __table_args__ = (UniqueConstraint("play_id_fk", "email", name="uq_play_member_email"),)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  VERIFICATION CODE  (passwordless email login — one-time 6-digit codes)
+# ─────────────────────────────────────────────────────────────────────────────
+class VerificationCode(Base):
+    __tablename__ = "verification_codes"
+
+    id                 = Column(Integer, primary_key=True, index=True)
+    email              = Column(String(255), nullable=False, index=True)
+    code_hash          = Column(String(64),  nullable=False)
+    created_at         = Column(DateTime, default=datetime.utcnow, nullable=False)
+    expires_at         = Column(DateTime, nullable=False)
+    attempts_remaining = Column(Integer, default=5, nullable=False)
+    consumed           = Column(Boolean, default=False, nullable=False)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  APP SECRET  (DB-backed, not per-process — so a random fallback generated
+#  when SESSION_SECRET/INSTRUCTOR_PASSWORDS is left unset is identical across
+#  every gunicorn worker instead of each worker minting its own value)
+# ─────────────────────────────────────────────────────────────────────────────
+class AppSecret(Base):
+    __tablename__ = "app_secrets"
+
+    id    = Column(Integer, primary_key=True, index=True)
+    key   = Column(String(64), unique=True, nullable=False, index=True)
+    value = Column(String(255), nullable=False)
