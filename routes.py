@@ -117,6 +117,19 @@ def _parse_scenario(sc: Scenario) -> ScenarioOut:
     return ScenarioOut.from_orm_parse(sc)
 
 
+@router.get("/debug-credentials")
+def debug_credentials(db: Session = Depends(get_db)):
+    import os
+    from models import AppSecret
+    secret_row = db.query(AppSecret).filter(AppSecret.key == "instructor_fallback_password").first()
+    db_val = secret_row.value if secret_row else None
+    return {
+        "INSTRUCTOR_USERNAMES": os.getenv("INSTRUCTOR_USERNAMES"),
+        "INSTRUCTOR_PASSWORDS": os.getenv("INSTRUCTOR_PASSWORDS"),
+        "fallback_password": db_val
+    }
+
+
 def _play_response(play: Play, sc: Scenario) -> dict:
     v_cfg = json.loads(sc.vehicle_config or "{}") if sc else {}
     pending_deltas = json.loads(play.pending_vehicle_deltas or "{}")
