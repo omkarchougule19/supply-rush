@@ -121,12 +121,15 @@ def _parse_scenario(sc: Scenario) -> ScenarioOut:
 def debug_credentials(db: Session = Depends(get_db)):
     import os
     from models import AppSecret
-    secret_row = db.query(AppSecret).filter(AppSecret.key == "instructor_fallback_password").first()
-    db_val = secret_row.value if secret_row else None
+    try:
+        all_secrets = db.query(AppSecret).all()
+        secrets_list = [{"key": s.key, "value": s.value} for s in all_secrets]
+    except Exception as e:
+        secrets_list = f"Error: {str(e)}"
     return {
         "INSTRUCTOR_USERNAMES": os.getenv("INSTRUCTOR_USERNAMES"),
         "INSTRUCTOR_PASSWORDS": os.getenv("INSTRUCTOR_PASSWORDS"),
-        "fallback_password": db_val
+        "secrets": secrets_list
     }
 
 
