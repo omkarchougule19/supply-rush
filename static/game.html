@@ -15,7 +15,7 @@
     html, body { width:100%; height:100%; overflow:hidden; font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); }
 
     /* ENTRY */
-    #entry-screen, #verify-screen { position:fixed; inset:0; z-index:100; background:var(--bg); display:flex; align-items:center; justify-content:center; }
+    #landing-screen, #student-screen, #verify-screen { position:fixed; inset:0; z-index:100; background:var(--bg); display:flex; align-items:center; justify-content:center; }
     .entry-box { width:min(420px, 92vw); background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:clamp(24px,5vw,40px) clamp(18px,5vw,36px); text-align:center; }
     .entry-logo { width:56px; height:56px; background:linear-gradient(135deg,var(--accent),var(--accent2)); border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:28px; margin:0 auto 18px; }
     .entry-title { font-family:'Space Grotesk',sans-serif; font-size:28px; font-weight:700; color:var(--accent); margin-bottom:6px; }
@@ -465,22 +465,30 @@
   </div>
 </div>
 
-<div id="entry-screen" style="display:none">
+<div id="landing-screen" style="display:none">
+  <div class="entry-box">
+    <div class="entry-logo">🚚</div>
+    <div class="entry-title">Supply Rush</div>
+    <p class="entry-sub">A supply chain strategy game</p>
+    <button class="entry-btn entry-btn-primary" onclick="showStudentScreen()">🎓 Student</button>
+    <button class="entry-btn entry-btn-secondary" onclick="window.location.href='/instructor'">🧑‍🏫 Instructor</button>
+  </div>
+</div>
+
+<div id="student-screen" style="display:none">
   <div class="entry-box">
     <div class="entry-logo">🚚</div>
     <div class="entry-title">Supply Rush</div>
     <p class="entry-sub">A supply chain strategy game</p>
     <input class="entry-name-input" id="entry-name" type="text" placeholder="Your name (optional)"/>
-    <button class="entry-btn entry-btn-primary" onclick="startNormalMode()">&#9654; Play Now</button>
+    <button class="entry-btn entry-btn-primary" onclick="chooseStudentMode('normal')">&#9654; Play Now</button>
     <div class="entry-divider"><span>or enter a class code</span></div>
     <input class="entry-input" id="entry-code" type="text" maxlength="8" placeholder="RUSH42" oninput="this.value=this.value.toUpperCase()"/>
     <input class="entry-name-input" id="entry-group" type="text" placeholder="Group name (e.g. Team 3)" style="margin-top:8px;"/>
-    <button class="entry-btn entry-btn-secondary" onclick="startWithCode()">Join Scenario</button>
+    <button class="entry-btn entry-btn-secondary" onclick="chooseStudentMode('code')">Join Scenario</button>
     <div class="entry-error" id="entry-error"></div>
     <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
-      <a href="/instructor" style="font-size:12px;color:var(--muted);text-decoration:none;display:inline-flex;align-items:center;gap:5px;transition:color .15s;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">
-        🎓 Instructor Dashboard &#8594;
-      </a>
+      <a href="#" style="font-size:12px;color:var(--muted);text-decoration:none;" onclick="event.preventDefault();showLandingScreen();">&#8592; Back</a>
     </div>
   </div>
 </div>
@@ -730,7 +738,14 @@ var state = {
   cash: 3000000, completed: false, scenario: null,
   quarterlyResults: [], placedWarehouses: [],
   warehouseSlots: [],
-  selectedSlotId: null
+  selectedSlotId: null,
+  // Set from /auth/me on load. verifiedEmail tracks whether THIS session
+  // already has a valid verification cookie (skips the verify screen).
+  verificationRequired: false, verifiedEmail: null,
+  // The student's chosen mode/inputs, stashed while they go verify their
+  // email — replayed once verification succeeds (see chooseStudentMode /
+  // verifyCode). {mode:"normal"|"code", name, code, groupName} or null.
+  pendingStart: null
 };
 
 // Fallback only, for true offline mode (backend unreachable even for the
@@ -850,11 +865,11 @@ function exitToHome(discard) {
     state.playId = null; state.completed = false;
     state.quarterlyResults = []; state.placedWarehouses = [];
     if (plChart) { plChart.destroy(); plChart = null; }
-    // Go back to entry screen via hash
+    // Go back to the landing screen via hash
     window.location.hash = "";
     document.getElementById("game-ui").className = "";
-    document.getElementById("entry-screen").style.display = "flex";
     document.getElementById("entry-error").textContent = "";
+    showLandingScreen();
     setTimeout(function() { state.exiting = false; }, 150);
   });
 }
@@ -899,28 +914,70 @@ var AUTH_REQUIRED_ERROR = "auth-required";
 // back to re-verification, instead of the same re-verify gate the two entry
 // points below already show.
 function checkAuthResponse(r) {
-  if (r.status === 401) { showVerifyScreen(); throw new Error(AUTH_REQUIRED_ERROR); }
+  if (r.status === 401) { showVerifyScreen("Your session expired — please verify your email again"); throw new Error(AUTH_REQUIRED_ERROR); }
   return r;
 }
 function isAuthRequiredError(e) {
   return !!(e && e.message === AUTH_REQUIRED_ERROR);
 }
-function showVerifyScreen() {
-  document.getElementById("entry-screen").style.display = "none";
+
+/* ── LANDING / MODE SELECTION ──
+   Flow: landing (Student vs Instructor) -> student sub-screen (Play Now vs
+   Join with Code) -> verify email (only if REQUIRE_STUDENT_VERIFICATION is
+   on and this session isn't already verified) -> the actual play gets
+   created, tied to that email. Verification is checked BEFORE the play is
+   created (not reactively after a 401) so the session is tied to the email
+   from the moment it exists. */
+function showLandingScreen() {
+  document.getElementById("verify-screen").style.display = "none";
+  document.getElementById("student-screen").style.display = "none";
+  document.getElementById("landing-screen").style.display = "flex";
+}
+function showStudentScreen() {
+  document.getElementById("landing-screen").style.display = "none";
+  document.getElementById("student-screen").style.display = "flex";
+}
+function showVerifyScreen(subMessage) {
+  document.getElementById("landing-screen").style.display = "none";
+  document.getElementById("student-screen").style.display = "none";
   document.getElementById("verify-code-section").style.display = "none";
   document.getElementById("verify-send-btn").disabled = false;
   document.getElementById("verify-send-btn").textContent = "Send Code";
-  document.getElementById("verify-sub").textContent = "Your session expired — please verify your email again";
+  document.getElementById("verify-sub").textContent = subMessage || "Enter your school email to continue";
   setVerifyErr("");
   document.getElementById("verify-screen").style.display = "flex";
 }
 
-function startNormalMode() {
+function chooseStudentMode(mode) {
+  var code = document.getElementById("entry-code").value.trim().toUpperCase();
   var name = document.getElementById("entry-name").value.trim();
+  var groupName = document.getElementById("entry-group").value.trim();
+  setErr("");
+  if (mode === "code" && !code) { setErr("Please enter a scenario code."); return; }
+
+  var action = { mode: mode, name: name, code: code, groupName: groupName };
+
+  if (state.verificationRequired && !state.verifiedEmail) {
+    state.pendingStart = action;
+    showVerifyScreen();
+    return;
+  }
+  runStudentStart(action);
+}
+
+function runStudentStart(action) {
+  if (action.mode === "normal") {
+    doStartNormalMode(action.name);
+  } else {
+    doStartWithCode(action.code, action.name, action.groupName);
+  }
+}
+
+function doStartNormalMode(name) {
   setErr("");
   fetch(API+"/sessions/normal",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({student_name:name||null})})
     .then(function(r){
-      if (r.status === 401) { showVerifyScreen(); throw new Error(AUTH_REQUIRED_ERROR); }
+      if (r.status === 401) { showVerifyScreen("Your session expired — please verify your email again"); throw new Error(AUTH_REQUIRED_ERROR); }
       return r.ok ? r.json() : Promise.reject(new Error("http-error"));
     })
     .then(initGame)
@@ -932,15 +989,11 @@ function startNormalMode() {
         quarterly_results:[],scenario:DEFAULT_SCENARIO});
     });
 }
-function startWithCode() {
-  var code = document.getElementById("entry-code").value.trim().toUpperCase();
-  var name = document.getElementById("entry-name").value.trim();
-  var groupName = document.getElementById("entry-group").value.trim();
-  if (!code) { setErr("Please enter a scenario code."); return; }
+function doStartWithCode(code, name, groupName) {
   setErr("");
   fetch(API+"/sessions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({scenario_code:code,student_name:name||null,group_name:groupName||null})})
     .then(function(r){
-      if (r.status === 401) { showVerifyScreen(); throw new Error(AUTH_REQUIRED_ERROR); }
+      if (r.status === 401) { showVerifyScreen("Your session expired — please verify your email again"); throw new Error(AUTH_REQUIRED_ERROR); }
       return r.ok ? r.json() : r.json().then(function(e){ throw e; });
     })
     .then(initGame)
@@ -982,35 +1035,48 @@ function verifyCode() {
   fetch(API+"/auth/verify-code",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:email,code:code})})
     .then(function(r){ return r.ok ? r.json() : r.json().then(function(e){ throw e; }); })
     .then(function(){
+      state.verifiedEmail = email;
       document.getElementById("verify-screen").style.display = "none";
       // A mid-game session expiry (checkAuthResponse -> showVerifyScreen)
       // leaves state.playId and the game-ui pointing at a still-valid play —
-      // re-verifying should resume it, not send the student back through
-      // scenario code + group name entry.
+      // re-verifying should resume it, not restart the entry flow.
       if (state.playId && state.playId !== DEMO_ID && !state.completed) {
         fetchDemand();
         return;
       }
-      document.getElementById("entry-screen").style.display = "flex";
+      // Replay whatever the student picked before being sent to verify —
+      // this is the moment the play actually gets created, now tied to the
+      // just-verified email. Reveal student-screen first so a failure here
+      // (e.g. bad scenario code) has somewhere visible to show its error.
+      if (state.pendingStart) {
+        var action = state.pendingStart;
+        state.pendingStart = null;
+        document.getElementById("student-screen").style.display = "flex";
+        runStudentStart(action);
+        return;
+      }
+      showLandingScreen();
     })
     .catch(function(e){ setVerifyErr((e&&e.detail) || "Invalid or expired code."); });
 }
 
-// Runs once on page load — decides whether to show the email-verify gate or
-// go straight to the normal entry screen. Fails open to the entry screen if
-// the backend is unreachable (offline demo mode must still be reachable).
+// Runs once on page load — caches verification status, then always starts
+// at the landing screen (Student vs Instructor). Verification (if required)
+// happens later, gated on the student's actual choice of mode. Fails open
+// (verification treated as off) if the backend is unreachable, so offline
+// demo mode stays reachable.
 function checkAuthAndShowEntry() {
   fetch(API+"/auth/me")
     .then(function(r){ return r.ok ? r.json() : {verification_required:false, email:null}; })
     .then(function(data){
-      if (data.verification_required && !data.email) {
-        document.getElementById("verify-screen").style.display = "flex";
-      } else {
-        document.getElementById("entry-screen").style.display = "flex";
-      }
+      state.verificationRequired = !!data.verification_required;
+      state.verifiedEmail = data.email || null;
+      showLandingScreen();
     })
     .catch(function(){
-      document.getElementById("entry-screen").style.display = "flex";
+      state.verificationRequired = false;
+      state.verifiedEmail = null;
+      showLandingScreen();
     });
 }
 
@@ -1039,7 +1105,9 @@ function initGame(data) {
   state.startCapex = data.start_capex || {warehouses:0, vehicles:0};
   MAX_ROUTE_DISTANCE = state.scenario.warehouse_service_radius || 30;
 
-  document.getElementById("entry-screen").style.display = "none";
+  document.getElementById("landing-screen").style.display = "none";
+  document.getElementById("student-screen").style.display = "none";
+  document.getElementById("verify-screen").style.display = "none";
   document.getElementById("game-ui").className = "visible";
   pushPlayingHash();
   document.getElementById("legend-mode").textContent = state.scenarioCode ? ("Code: "+state.scenarioCode) : "Normal mode";

@@ -116,6 +116,14 @@ class Play(Base):
     scenario_code   = Column(String(8),  nullable=True, index=True)                # null = normal mode
     scenario_id     = Column(Integer, ForeignKey("scenarios.id"), nullable=True)   # null = normal mode
     student_name    = Column(String(120), nullable=True)
+    # The verified email of whoever started this play (the "owner"). Set once
+    # at creation from require_student_email's dependency value — "unverified
+    # @local" when REQUIRE_STUDENT_VERIFICATION is off, matching the same
+    # placeholder PlayMember rows already use in that case. A play with
+    # multiple students still has exactly one owner here; every joined
+    # student's own email lives in PlayMember (see below), which this column
+    # does not replace.
+    email           = Column(String(255), nullable=True, index=True)
     # Free-text group identifier a student enters alongside the scenario code.
     # Every student who enters the same (scenario_id, group_name) pair (case-
     # insensitive match) lands in this same shared play — see PlayMember for

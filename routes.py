@@ -124,6 +124,7 @@ def _play_response(play: Play, sc: Scenario) -> dict:
         "play_id":         play.play_id,
         "scenario_code":   play.scenario_code,
         "student_name":    play.student_name,
+        "email":           play.email,
         "started_at":      play.started_at,
         "current_quarter": play.current_quarter,
         "total_quarters":  sc.total_quarters if sc else 16,
@@ -345,6 +346,7 @@ def list_all_plays(
             "play_id":         p.play_id,
             "scenario_code":   p.scenario_code,
             "student_name":    p.student_name,
+            "email":           p.email,
             "group_name":      p.group_name,
             "member_emails":   [m.email for m in p.members],
             "started_at":      p.started_at,
@@ -400,6 +402,7 @@ def start_play(payload: PlayCreate, db: Session = Depends(get_db), email: str = 
         scenario_code=sc.code,
         scenario_id=sc.id,
         student_name=payload.student_name,
+        email=email,
         group_name=group_name or None,
         current_quarter=0,   # Quarter 0 = setup phase, no demand/simulation
         cash=sc.starting_budget,
@@ -506,6 +509,7 @@ def start_normal_play(payload: NormalModeStart, db: Session = Depends(get_db), e
         scenario_code=None,   # null = normal mode
         scenario_id=sc.id,
         student_name=payload.student_name,
+        email=email,
         current_quarter=0,   # Quarter 0 = setup phase, no demand/simulation
         cash=sc.starting_budget,
         quarterly_results=json.dumps([]),

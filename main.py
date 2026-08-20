@@ -99,6 +99,7 @@ try:
                 ("setup_capex_warehouses", "FLOAT", "0.0"),
                 ("setup_capex_vehicles",   "FLOAT", "0.0"),
                 ("group_name", "VARCHAR(120)", "NULL"),
+                ("email", "VARCHAR(255)", "NULL"),
             ]
             for col_name, col_type, default_val in plays_columns:
                 _add_column_if_missing(conn, "plays", col_name, col_type, default_val)
