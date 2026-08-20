@@ -121,6 +121,12 @@ def roll_disruption_events(
     Quarter 0 is setup-only (no simulation runs), so no events ever fire
     for it. Returns [] entirely when the scenario has disruption events
     turned off (the default).
+
+    disruption_config["quarter_overrides"], if present, lets an instructor
+    pin a specific event to a specific quarter at a specific severity —
+    that event fires on that quarter unconditionally, skipping its own
+    probability roll for that quarter only. Every other event type (and
+    the same event type on any other quarter) still rolls normally.
     """
     if not disruption_config or not disruption_config.get("enabled"):
         return []
@@ -140,10 +146,49 @@ def roll_disruption_events(
     r = random.Random(scenario_id * 1000 + quarter)
 
     fired = []
+    overridden_keys = set()
+
+    # Instructor-pinned overrides for this exact quarter fire first and
+    # deterministically — bypassing that event type's probability roll for
+    # this quarter only. Sorted by event_key so the RNG draw sequence below
+    # (r.choice for the target slot) never depends on submission order.
+    quarter_overrides = disruption_config.get("quarter_overrides", []) or []
+    this_quarter_overrides = sorted(
+        (ov for ov in quarter_overrides if ov.get("quarter") == quarter),
+        key=lambda ov: ov.get("event_key", ""),
+    )
+    for ov in this_quarter_overrides:
+        key = ov.get("event_key")
+        event_type = DISRUPTION_EVENT_TYPES.get(key)
+        if not event_type or key in overridden_keys:
+            continue
+        overridden_keys.add(key)  # also suppresses this key's random roll below
+
+        severity = max(0.0, min(1.0, ov.get("severity", 0.3)))
+        target_slot_id = None
+        if event_type["kind"] == "warehouse_capacity":
+            if not warehouse_slot_ids:
+                continue  # nothing to target — skip this override rather than crash
+            target_slot_id = r.choice(warehouse_slot_ids)
+
+        pct = round(severity * 100)
+        message = event_type["message_template"].format(target_slot_id=target_slot_id, pct=pct)
+
+        fired.append({
+            "key":             key,
+            "kind":            event_type["kind"],
+            "vehicle_type":    event_type["vehicle_type"],
+            "target_slot_id":  target_slot_id,
+            "severity":        round(severity, 4),
+            "message":         message,
+        })
+
     # Fixed sorted-key order so the RNG draw sequence never depends on dict
     # iteration order (which Python does not guarantee is stable across
     # different in-memory dict constructions of "the same" JSON).
     for key in sorted(DISRUPTION_EVENT_TYPES.keys()):
+        if key in overridden_keys:
+            continue  # instructor already pinned this event type this quarter
         cfg = events_cfg.get(key)
         if not cfg or not cfg.get("enabled"):
             continue

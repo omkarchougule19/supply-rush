@@ -106,6 +106,18 @@
       font-size: 16px;
       cursor: pointer;
     }
+    .disruption-toast {
+      position: fixed; top: 70px; left: 50%; z-index: 500;
+      max-width: 460px; padding: 12px 18px;
+      background: rgba(24,10,10,.96); border: 1px solid var(--red); border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.45);
+      opacity: 0; transform: translateX(-50%) translateY(-10px);
+      transition: opacity .3s ease, transform .3s ease;
+      pointer-events: none;
+    }
+    .disruption-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .disruption-toast .dt-row { font-size: 12.5px; font-weight: 600; color: #fff; line-height: 1.5; }
+    .disruption-toast .dt-row + .dt-row { margin-top: 6px; }
     .wh-panel-error {
       background: rgba(239, 68, 68, 0.12);
       border-bottom: 1px solid rgba(239, 68, 68, 0.25);
@@ -481,6 +493,8 @@
   </div>
   <!-- Global error toast banner -->
   <div id="global-error-banner" class="global-error-banner" style="display:none"></div>
+  <!-- Disruption event popup — shows briefly when a quarter with a fired disruption starts -->
+  <div id="disruption-toast" class="disruption-toast" style="display:none"></div>
   <div class="topbar">
     <div style="display:flex;align-items:center;gap:12px;"><button class="menu-btn" onclick="openPause()" title="Menu">&#9776;</button><div class="logo"><div class="logo-mark">🚚</div>Supply Rush</div></div>
     <div class="top-stats">
@@ -1680,6 +1694,33 @@ function renderDisruptionForecast(events) {
     return '<div class="forecast-row" style="justify-content:flex-start">'
       + '<span style="font-size:11px;line-height:1.4">' + escapeHtml(ev.message) + '</span></div>';
   }).join("");
+  showDisruptionToast(events);
+}
+
+// Small popup that appears the moment a quarter with a fired disruption
+// event starts, then auto-dismisses after 4s — separate from (and louder
+// than) the persistent forecast card above, so a fired disruption is never
+// missed even if a group never glances at the sidebar.
+function showDisruptionToast(events) {
+  var el = document.getElementById("disruption-toast");
+  if (!el) return;
+  if (state._disruptionToastHideTimer) { clearTimeout(state._disruptionToastHideTimer); state._disruptionToastHideTimer = null; }
+  if (state._disruptionToastCloseTimer) { clearTimeout(state._disruptionToastCloseTimer); state._disruptionToastCloseTimer = null; }
+  if (!events || !events.length) {
+    el.classList.remove("show");
+    el.style.display = "none";
+    return;
+  }
+  el.innerHTML = events.map(function(ev){
+    return '<div class="dt-row">' + escapeHtml(ev.message) + '</div>';
+  }).join("");
+  el.style.display = "block";
+  void el.offsetWidth; // force reflow so the transition re-triggers on back-to-back calls
+  el.classList.add("show");
+  state._disruptionToastHideTimer = setTimeout(function(){
+    el.classList.remove("show");
+    state._disruptionToastCloseTimer = setTimeout(function(){ el.style.display = "none"; }, 320);
+  }, 4000);
 }
 
 /* ── ZONE PANEL (Outsourcing) ── */

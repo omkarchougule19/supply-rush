@@ -5,7 +5,7 @@ schemas.py — Pydantic request & response models
 import json
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, validator
-from game_logic import DEFAULT_DISRUPTION_CONFIG
+from game_logic import DEFAULT_DISRUPTION_CONFIG, DISRUPTION_EVENT_TYPES
 from models import DEFAULT_WAREHOUSE_CONFIG, DEFAULT_VEHICLE_CONFIG
 
 
@@ -72,6 +72,35 @@ class DisruptionEventConfig(BaseModel):
         return v
 
 
+class QuarterOverride(BaseModel):
+    """An instructor-pinned disaster: this exact event_key is guaranteed to
+    fire on this exact quarter, at this severity — bypassing that event
+    type's probability roll for that one quarter only. Other event types
+    (and this same event type on non-overridden quarters) still roll
+    normally per their `events` config above."""
+    quarter:    int
+    event_key:  str
+    severity:   float = 0.3
+
+    @validator("quarter")
+    def _quarter_positive(cls, v):
+        if v < 1:
+            raise ValueError("quarter must be >= 1")
+        return v
+
+    @validator("event_key")
+    def _event_key_known(cls, v):
+        if v not in DISRUPTION_EVENT_TYPES:
+            raise ValueError(f"unknown event_key: {v}")
+        return v
+
+    @validator("severity")
+    def _severity_in_range(cls, v):
+        if not (0 <= v <= 1):
+            raise ValueError("severity must be between 0 and 1")
+        return v
+
+
 class DisruptionConfig(BaseModel):
     """Master switch plus per-event-type tuning. See game_logic.DISRUPTION_EVENT_TYPES
     for the fixed set of event keys this dict may contain."""
@@ -79,6 +108,7 @@ class DisruptionConfig(BaseModel):
     events: Dict[str, DisruptionEventConfig] = {
         key: DisruptionEventConfig(**cfg) for key, cfg in DEFAULT_DISRUPTION_CONFIG["events"].items()
     }
+    quarter_overrides: List[QuarterOverride] = []
 
     @validator("events")
     def _backfill_missing_event_types(cls, v):
@@ -148,6 +178,18 @@ class ScenarioCreate(BaseModel):
         # dashboard control able to set it back to a valid value.
         if v is not None and v < 0:
             raise ValueError("unlocked_quarter must be >= 0")
+        return v
+
+    @validator("disruption_config")
+    def _quarter_overrides_within_total_quarters(cls, v, values):
+        total = values.get("total_quarters")
+        if v and total:
+            for ov in v.quarter_overrides:
+                if ov.quarter > total:
+                    raise ValueError(
+                        f"disruption_config.quarter_overrides: quarter {ov.quarter} "
+                        f"exceeds total_quarters ({total})"
+                    )
         return v
 
 

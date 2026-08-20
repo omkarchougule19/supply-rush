@@ -201,7 +201,7 @@
           </div>
           <div class="form-group">
             <label>Total Quarters</label>
-            <input type="number" id="sc_quarters" value="16" min="4" max="40"/>
+            <input type="number" id="sc_quarters" value="16" min="4" max="40" oninput="renderQuarterOverrideRows()"/>
           </div>
           <div class="form-group">
             <label>Starting Budget ($)</label>
@@ -352,6 +352,21 @@
           </tbody>
         </table>
         <div class="forecast-note" style="margin-top:8px">Each enabled event rolls independently every quarter. Shared across every group under this scenario code — same quarter, same event, same severity for everyone; an earthquake's warehouse-capacity hit only actually affects a group if they have a warehouse at the targeted map slot.</div>
+
+        <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border,#2a3550)">
+          <div class="card-title" style="font-size:14px">Pin a Disaster to a Quarter <span class="pill">optional</span></div>
+          <div class="forecast-note" style="margin-bottom:10px">Guarantee a specific event fires on a specific quarter, at a severity you set — it fires regardless of that event's probability above. Leave a quarter set to "None" to keep it random. Other event types can still randomly fire on a pinned quarter.</div>
+          <table class="config-table">
+            <thead>
+              <tr>
+                <th style="width:70px">Quarter</th>
+                <th>Disaster</th>
+                <th style="width:140px">Severity (%)</th>
+              </tr>
+            </thead>
+            <tbody id="quarter-override-rows"></tbody>
+          </table>
+        </div>
       </div>
       <!-- Warehouses -->
       <div class="card">
@@ -614,7 +629,70 @@
         harsh_winter_drone:   eventCfg("harsh_winter_drone"),
         fuel_hike_truck:      eventCfg("fuel_hike_truck"),
       },
+      quarter_overrides: collectQuarterOverrides(),
     };
+  }
+
+  // ── Per-quarter pinned disaster rows ──────────────────────────────────────
+  const QUARTER_OVERRIDE_EVENT_OPTIONS = [
+    { key: "",                      label: "— None (random) —" },
+    { key: "earthquake_warehouse",  label: "🌎 Earthquake" },
+    { key: "harsh_winter_drone",    label: "❄️ Harsh Winter" },
+    { key: "fuel_hike_truck",       label: "⛽ Fuel Price Hike" },
+  ];
+
+  function renderQuarterOverrideRows() {
+    const n = Math.max(0, +document.getElementById("sc_quarters").value || 0);
+    const body = document.getElementById("quarter-override-rows");
+    // Preserve any selections already made for quarters that still exist
+    // after a quarter-count change, instead of wiping the whole table.
+    const prevEvent = {}, prevSeverity = {};
+    body.querySelectorAll("tr").forEach(function(row){
+      const q = row.dataset.quarter;
+      const sel = row.querySelector("select");
+      const sev = row.querySelector("input");
+      if (sel) prevEvent[q] = sel.value;
+      if (sev) prevSeverity[q] = sev.value;
+    });
+
+    let html = "";
+    for (let q = 1; q <= n; q++) {
+      const selectedEvent = prevEvent[q] || "";
+      const severity = prevSeverity[q] || "30";
+      html += '<tr data-quarter="' + q + '">'
+        + '<td><span class="pill">Q' + q + '</span></td>'
+        + '<td><select id="qov_' + q + '_event" onchange="updateQuarterOverrideRowState(' + q + ')" '
+        + 'style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;font-family:inherit;outline:none;width:100%;max-width:220px;">'
+        + QUARTER_OVERRIDE_EVENT_OPTIONS.map(function(opt){
+            return '<option value="' + opt.key + '"' + (opt.key === selectedEvent ? " selected" : "") + '>' + opt.label + '</option>';
+          }).join("")
+        + '</select></td>'
+        + '<td><input type="number" id="qov_' + q + '_severity" value="' + severity + '" min="0" max="100" step="5"'
+        + (selectedEvent ? "" : " disabled") + '/></td>'
+        + '</tr>';
+    }
+    body.innerHTML = html;
+  }
+
+  function updateQuarterOverrideRowState(q) {
+    const hasEvent = document.getElementById("qov_" + q + "_event").value !== "";
+    document.getElementById("qov_" + q + "_severity").disabled = !hasEvent;
+  }
+
+  function collectQuarterOverrides() {
+    const body = document.getElementById("quarter-override-rows");
+    const overrides = [];
+    body.querySelectorAll("tr").forEach(function(row){
+      const q = +row.dataset.quarter;
+      const eventKey = document.getElementById("qov_" + q + "_event").value;
+      if (!eventKey) return;
+      overrides.push({
+        quarter:    q,
+        event_key:  eventKey,
+        severity:   +document.getElementById("qov_" + q + "_severity").value / 100,
+      });
+    });
+    return overrides;
   }
 
   // ── Create scenario ───────────────────────────────────────────────────────
@@ -1097,7 +1175,13 @@
     document.getElementById("dis_fuel_hike_truck_probability").value = "8";
     document.getElementById("dis_fuel_hike_truck_severity_min").value = "20";
     document.getElementById("dis_fuel_hike_truck_severity_max").value = "60";
+
+    renderQuarterOverrideRows();
   }
+
+  // Populate the pinned-disaster table once on initial page load (the form's
+  // other fields are pre-filled directly in the static HTML; this table isn't).
+  renderQuarterOverrideRows();
 </script>
 </body>
 </html>
