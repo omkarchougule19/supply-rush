@@ -32,6 +32,17 @@ try:
         
         try:
             Base.metadata.create_all(bind=conn)
+            # create_all() on a raw Connection does NOT auto-commit under
+            # SQLAlchemy 2.0 — without this, every CREATE TABLE stays in an
+            # open transaction that's silently discarded when the connection
+            # closes. Harmless on a DB that already has its tables (the
+            # overwhelmingly common case — create_all is then a no-op), but
+            # on a genuinely empty fresh database this left every table
+            # missing, so every ALTER TABLE/index statement below failed
+            # with "relation does not exist" and the app booted with zero
+            # tables. Commit immediately so the tables are actually there
+            # before anything else in this block runs.
+            conn.commit()
 
             def _add_column_if_missing(conn_obj, table, col_name, col_type, default_val):
                 """ADD COLUMN fails every single boot once the column already exists
