@@ -16,6 +16,7 @@ just to exercise the rest of the app.
 """
 
 import os
+import re
 import hashlib
 import secrets
 import logging
@@ -293,19 +294,45 @@ def verify_code(db: Session, email: str, code: str) -> bool:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  Sending the code (Resend) — falls back to a log line when unconfigured
+#  Sending the code — SendGrid (single-sender verified address, no domain
+#  ownership needed) or Resend (requires a verified domain to reach arbitrary
+#  recipients). Falls back to a log line when neither is configured.
 # ─────────────────────────────────────────────────────────────────────────────
-def send_verification_email(email: str, code: str) -> None:
-    api_key = os.getenv("RESEND_API_KEY")
-    from_addr = os.getenv("EMAIL_FROM", "Supply Rush <onboarding@resend.dev>")
+def _parse_from_address(raw: str):
+    """'Name <email@x.com>' -> (name, email); a bare address -> (None, address)."""
+    raw = raw.strip()
+    m = re.match(r'^(.*)<(.+)>$', raw)
+    if m:
+        name = m.group(1).strip().strip('"')
+        return (name or None), m.group(2).strip()
+    return None, raw
 
-    if not api_key:
-        # Local/dev fallback: log instead of sending. This only matters when
-        # REQUIRE_STUDENT_VERIFICATION is explicitly turned on without Resend
-        # configured — normal local dev never reaches this code path.
-        logger.warning(f"[DEV — no RESEND_API_KEY set] Verification code for {email}: {code}")
-        return
 
+def _send_via_sendgrid(email: str, code: str, api_key: str, from_addr: str) -> None:
+    name, addr = _parse_from_address(from_addr)
+    from_obj = {"email": addr, **({"name": name} if name else {})}
+
+    import requests
+    resp = requests.post(
+        "https://api.sendgrid.com/v3/mail/send",
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json={
+            "personalizations": [{"to": [{"email": email}]}],
+            "from": from_obj,
+            "subject": "Your Supply Rush verification code",
+            "content": [{
+                "type": "text/plain",
+                "value": f"Your verification code is: {code}\n\nIt expires in {CODE_TTL_MINUTES} minutes.",
+            }],
+        },
+        timeout=10,
+    )
+    if resp.status_code >= 300:
+        logger.error(f"SendGrid API error sending to {email}: {resp.status_code} {resp.text}")
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Could not send verification email. Please try again.")
+
+
+def _send_via_resend(email: str, code: str, api_key: str, from_addr: str) -> None:
     import requests
     resp = requests.post(
         "https://api.resend.com/emails",
@@ -321,3 +348,21 @@ def send_verification_email(email: str, code: str) -> None:
     if resp.status_code >= 300:
         logger.error(f"Resend API error sending to {email}: {resp.status_code} {resp.text}")
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Could not send verification email. Please try again.")
+
+
+def send_verification_email(email: str, code: str) -> None:
+    sendgrid_key = os.getenv("SENDGRID_API_KEY")
+    resend_key = os.getenv("RESEND_API_KEY")
+    from_addr = os.getenv("EMAIL_FROM", "Supply Rush <onboarding@resend.dev>")
+
+    if sendgrid_key:
+        _send_via_sendgrid(email, code, sendgrid_key, from_addr)
+        return
+    if resend_key:
+        _send_via_resend(email, code, resend_key, from_addr)
+        return
+
+    # Local/dev fallback: log instead of sending. This only matters when
+    # REQUIRE_STUDENT_VERIFICATION is explicitly turned on without any email
+    # provider configured — normal local dev never reaches this code path.
+    logger.warning(f"[DEV — no SENDGRID_API_KEY/RESEND_API_KEY set] Verification code for {email}: {code}")
