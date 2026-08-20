@@ -295,7 +295,11 @@ class ScenarioOut(BaseModel):
 class PlayCreate(BaseModel):
     scenario_code: str           # student enters this
     student_name:  Optional[str] = None
-    group_name:    Optional[str] = None   # required when student verification is on
+
+
+class InstructorLoginRequest(BaseModel):
+    username: str
+    password: str
 
 
 class OutsourceZoneRequest(BaseModel):

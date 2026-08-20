@@ -480,11 +480,14 @@
     <div class="entry-logo">🚚</div>
     <div class="entry-title">Supply Rush</div>
     <p class="entry-sub">A supply chain strategy game</p>
+    <div id="student-identity-banner" style="display:none;margin-bottom:14px;font-size:12px;color:var(--muted);text-align:center;">
+      Signed in as <strong id="student-identity-name" style="color:var(--text)"></strong> &middot;
+      <a href="#" style="color:var(--muted);text-decoration:underline;" onclick="event.preventDefault();switchStudentIdentity();">Not you? Sign in as someone else</a>
+    </div>
     <input class="entry-name-input" id="entry-name" type="text" placeholder="Your name (optional)"/>
     <button class="entry-btn entry-btn-primary" onclick="chooseStudentMode('normal')">&#9654; Play Now</button>
     <div class="entry-divider"><span>or enter a class code</span></div>
     <input class="entry-input" id="entry-code" type="text" maxlength="8" placeholder="RUSH42" oninput="this.value=this.value.toUpperCase()"/>
-    <input class="entry-name-input" id="entry-group" type="text" placeholder="Group name (e.g. Team 3)" style="margin-top:8px;"/>
     <button class="entry-btn entry-btn-secondary" onclick="chooseStudentMode('code')">Join Scenario</button>
     <div class="entry-error" id="entry-error"></div>
     <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
@@ -744,7 +747,7 @@ var state = {
   verificationRequired: false, verifiedEmail: null,
   // The student's chosen mode/inputs, stashed while they go verify their
   // email — replayed once verification succeeds (see chooseStudentMode /
-  // verifyCode). {mode:"normal"|"code", name, code, groupName} or null.
+  // verifyCode). {mode:"normal"|"code", name, code} or null.
   pendingStart: null
 };
 
@@ -935,7 +938,32 @@ function showLandingScreen() {
 }
 function showStudentScreen() {
   document.getElementById("landing-screen").style.display = "none";
+  renderStudentIdentityBanner();
   document.getElementById("student-screen").style.display = "flex";
+}
+
+// Shows "Signed in as X" (X = the part of the verified email before "@")
+// when this browser already has a valid verification cookie — several
+// students can share one computer, so it must always be obvious whose
+// session is currently active, with an easy way to switch.
+function renderStudentIdentityBanner() {
+  var banner = document.getElementById("student-identity-banner");
+  if (state.verifiedEmail) {
+    document.getElementById("student-identity-name").textContent = state.verifiedEmail.split("@")[0];
+    banner.style.display = "block";
+  } else {
+    banner.style.display = "none";
+  }
+}
+
+// Logs the current student out of this browser (clears the verification
+// cookie) so the next student on a shared computer can verify their own
+// email instead of inheriting the previous student's session/plays.
+function switchStudentIdentity() {
+  fetch(API+"/auth/logout", {method:"POST"}).finally(function(){
+    state.verifiedEmail = null;
+    showStudentScreen();
+  });
 }
 function showVerifyScreen(subMessage) {
   document.getElementById("landing-screen").style.display = "none";
@@ -951,11 +979,10 @@ function showVerifyScreen(subMessage) {
 function chooseStudentMode(mode) {
   var code = document.getElementById("entry-code").value.trim().toUpperCase();
   var name = document.getElementById("entry-name").value.trim();
-  var groupName = document.getElementById("entry-group").value.trim();
   setErr("");
   if (mode === "code" && !code) { setErr("Please enter a scenario code."); return; }
 
-  var action = { mode: mode, name: name, code: code, groupName: groupName };
+  var action = { mode: mode, name: name, code: code };
 
   if (state.verificationRequired && !state.verifiedEmail) {
     state.pendingStart = action;
@@ -969,7 +996,7 @@ function runStudentStart(action) {
   if (action.mode === "normal") {
     doStartNormalMode(action.name);
   } else {
-    doStartWithCode(action.code, action.name, action.groupName);
+    doStartWithCode(action.code, action.name);
   }
 }
 
@@ -989,9 +1016,9 @@ function doStartNormalMode(name) {
         quarterly_results:[],scenario:DEFAULT_SCENARIO});
     });
 }
-function doStartWithCode(code, name, groupName) {
+function doStartWithCode(code, name) {
   setErr("");
-  fetch(API+"/sessions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({scenario_code:code,student_name:name||null,group_name:groupName||null})})
+  fetch(API+"/sessions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({scenario_code:code,student_name:name||null})})
     .then(function(r){
       if (r.status === 401) { showVerifyScreen("Your session expired — please verify your email again"); throw new Error(AUTH_REQUIRED_ERROR); }
       return r.ok ? r.json() : r.json().then(function(e){ throw e; });
@@ -1051,7 +1078,7 @@ function verifyCode() {
       if (state.pendingStart) {
         var action = state.pendingStart;
         state.pendingStart = null;
-        document.getElementById("student-screen").style.display = "flex";
+        showStudentScreen();
         runStudentStart(action);
         return;
       }

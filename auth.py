@@ -1,18 +1,24 @@
 """
-auth.py — Instructor HTTP Basic Auth + passwordless student email verification
+auth.py — Instructor session login + passwordless student email verification
 
 Two independent gates:
   - Instructor: a static username/password from env vars (INSTRUCTOR_USERNAMES /
-    INSTRUCTOR_PASSWORDS), checked via HTTPBasic — the browser's native login
-    popup. No database, no accounts.
+    INSTRUCTOR_PASSWORDS), checked against a real login form (not the browser's
+    native HTTP Basic popup — Basic Auth credentials get silently cached by the
+    browser for the rest of that browser session, so a shared classroom
+    computer would stay "logged in" for whoever opens the dashboard next; a
+    real login form backed by a deliberately non-persistent session cookie
+    (no Max-Age/Expires — cleared the moment the browser closes) avoids that).
+    No accounts beyond the env-var credentials.
   - Students: a 6-digit one-time code emailed to a school address, restricted
     to ALLOWED_STUDENT_EMAIL_DOMAIN. No passwords are ever created or stored.
     Once verified, a signed cookie carries the email for SESSION_MAX_AGE_SECONDS
     so the student doesn't need to re-verify on every request.
 
-Both gates are OFF by default (student verification via REQUIRE_STUDENT_VERIFICATION,
-defaulting to "false") so local development never needs Resend/env vars configured
-just to exercise the rest of the app.
+Both gates are OFF/require-login by their own defaults (student verification
+via REQUIRE_STUDENT_VERIFICATION, defaulting to "false"; instructor login has
+no "off" — it's always required) so local development never needs
+Resend/env vars configured just to exercise the rest of the app.
 """
 
 import os
@@ -23,7 +29,6 @@ import logging
 from datetime import datetime, timedelta
 
 from fastapi import Depends, HTTPException, Request, Response, status
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from sqlalchemy.orm import Session
 
@@ -69,20 +74,28 @@ def _get_or_create_persistent_secret(key: str, generator) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  Instructor — HTTP Basic Auth
+#  Instructor — session-cookie login via a real login form
 # ─────────────────────────────────────────────────────────────────────────────
-security = HTTPBasic()
+INSTRUCTOR_SESSION_COOKIE_NAME = "sr_instructor_session"
+# Sanity bound on the signed cookie's own validity, independent of the
+# browser-session-only nature of the cookie itself (see set_instructor_session_
+# cookie) — mainly guards against a tab left open across an unusually long
+# continuous browser session.
+INSTRUCTOR_SESSION_MAX_AGE_SECONDS = 12 * 3600
 
 # Only used when INSTRUCTOR_USERNAMES/PASSWORDS are both left unset —
 # DB-persisted (not the well-known "admin"/"password", and not a fresh
 # random value per process — under multi-worker gunicorn every worker must
 # agree on the same fallback or logins would only work on some of them),
 # and logged once per worker so local dev without any env vars can find it.
-_fallback_password_logged = False
+_instructor_fallback_password_logged = False
 
 
-def authenticate_instructor(credentials: HTTPBasicCredentials = Depends(security)) -> str:
-    global _fallback_password_logged
+def _resolve_instructor_credentials():
+    """Returns (allowed_usernames, allowed_passwords), order-matched, from
+    INSTRUCTOR_USERNAMES/PASSWORDS, or a single DB-persisted fallback
+    ("admin" / random password, logged once) when both are left unset."""
+    global _instructor_fallback_password_logged
     usernames_env = os.getenv("INSTRUCTOR_USERNAMES")
     passwords_env = os.getenv("INSTRUCTOR_PASSWORDS")
 
@@ -90,39 +103,80 @@ def authenticate_instructor(credentials: HTTPBasicCredentials = Depends(security
         fallback_password = _get_or_create_persistent_secret(
             "instructor_fallback_password", lambda: secrets.token_urlsafe(12)
         )
-        if not _fallback_password_logged:
+        if not _instructor_fallback_password_logged:
             logger.warning(
                 f"[DEV — INSTRUCTOR_USERNAMES/PASSWORDS not set] Instructor login: admin / {fallback_password}"
             )
-            _fallback_password_logged = True
-        allowed_users = ["admin"]
-        allowed_passwords = [fallback_password]
-    elif not usernames_env or not passwords_env:
+            _instructor_fallback_password_logged = True
+        return ["admin"], [fallback_password]
+
+    if not usernames_env or not passwords_env:
         # Exactly one of the two is set — never silently treat the missing
         # one as a blank-string credential (a much weaker, unintended login).
         raise HTTPException(
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "Instructor auth misconfigured: INSTRUCTOR_USERNAMES and INSTRUCTOR_PASSWORDS must both be set together.",
         )
-    else:
-        allowed_users = usernames_env.split(",")
-        allowed_passwords = passwords_env.split(",")
-        if len(allowed_users) != len(allowed_passwords):
-            raise HTTPException(
-                status.HTTP_500_INTERNAL_SERVER_ERROR,
-                "Instructor auth misconfigured: INSTRUCTOR_USERNAMES and INSTRUCTOR_PASSWORDS must have the same number of comma-separated entries.",
-            )
-    user_map = dict(zip(allowed_users, allowed_passwords))
 
-    correct_password = user_map.get(credentials.username)
-    if not correct_password or not secrets.compare_digest(credentials.password, correct_password):
+    allowed_users = usernames_env.split(",")
+    allowed_passwords = passwords_env.split(",")
+    if len(allowed_users) != len(allowed_passwords):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            # Critical — instructs the browser to show the login popup
-            headers={"WWW-Authenticate": "Basic"},
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "Instructor auth misconfigured: INSTRUCTOR_USERNAMES and INSTRUCTOR_PASSWORDS must have the same number of comma-separated entries.",
         )
-    return credentials.username
+    return allowed_users, allowed_passwords
+
+
+def verify_instructor_credentials(username: str, password: str) -> bool:
+    allowed_users, allowed_passwords = _resolve_instructor_credentials()
+    user_map = dict(zip(allowed_users, allowed_passwords))
+    correct_password = user_map.get(username)
+    return bool(correct_password) and secrets.compare_digest(password, correct_password)
+
+
+def _instructor_serializer() -> URLSafeTimedSerializer:
+    secret = os.getenv("SESSION_SECRET") or _fallback_session_secret()
+    return URLSafeTimedSerializer(secret, salt="sr-instructor-session")
+
+
+def set_instructor_session_cookie(response: Response, username: str) -> None:
+    token = _instructor_serializer().dumps({"username": username})
+    response.set_cookie(
+        INSTRUCTOR_SESSION_COOKIE_NAME,
+        token,
+        httponly=True,
+        samesite="lax",
+        secure=os.getenv("COOKIE_SECURE", "true").lower() == "true",
+        # Deliberately no max_age/expires — a browser-session-only cookie,
+        # gone the moment the browser closes. See module docstring: this is
+        # the whole point of moving off HTTP Basic Auth's browser-cached
+        # credentials for a dashboard that may run on a shared computer.
+    )
+
+
+def clear_instructor_session_cookie(response: Response) -> None:
+    response.delete_cookie(INSTRUCTOR_SESSION_COOKIE_NAME)
+
+
+def get_instructor_session_username(request: Request):
+    """Returns the logged-in instructor's username, or None if absent/invalid/expired."""
+    token = request.cookies.get(INSTRUCTOR_SESSION_COOKIE_NAME)
+    if not token:
+        return None
+    try:
+        data = _instructor_serializer().loads(token, max_age=INSTRUCTOR_SESSION_MAX_AGE_SECONDS)
+        return data.get("username")
+    except (BadSignature, SignatureExpired):
+        return None
+
+
+def require_instructor_session(request: Request) -> str:
+    """FastAPI dependency for every instructor-only API route."""
+    username = get_instructor_session_username(request)
+    if not username:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Please log in.")
+    return username
 
 
 # ─────────────────────────────────────────────────────────────────────────────

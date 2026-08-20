@@ -12,11 +12,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-from fastapi import Depends
-
 from database import engine, Base
 from routes import router
-from auth import authenticate_instructor
 from game_logic import DEFAULT_DISRUPTION_CONFIG
 
 import logging
@@ -111,12 +108,11 @@ try:
             for col_name, col_type, default_val in placed_warehouses_columns:
                 _add_column_if_missing(conn, "placed_warehouses", col_name, col_type, default_val)
 
-            # 5. Partial unique index closing the race where two group members
-            #    submitting POST /sessions for the same (scenario, group_name)
-            #    at the same moment could each create their own Play row instead
-            #    of sharing one (the app-level find-or-create check-then-insert
-            #    is not atomic without this). Scoped to incomplete plays only —
-            #    a group name may legitimately be reused once its play is done.
+            # 5. Partial unique index from the now-removed team/group-play
+            #    feature — kept only so historic group-based rows in an old DB
+            #    keep their existing uniqueness guarantee. New plays never set
+            #    group_name any more (see 5b below for the current model), so
+            #    this index simply never matches anything going forward.
             completed_false = "0" if engine.dialect.name == "sqlite" else "false"
             try:
                 conn.execute(text(
@@ -128,8 +124,30 @@ try:
             except Exception as e:
                 conn.rollback()  # e.g. pre-existing duplicate rows on an old DB — best-effort, matches migrations above
                 logger.error(
-                    f"Could not create ix_plays_active_group unique index — group-play duplicate-creation race is "
-                    f"UNPROTECTED until this is resolved: {str(e)}"
+                    f"Could not create ix_plays_active_group unique index — legacy group-play duplicate-creation "
+                    f"race is UNPROTECTED until this is resolved: {str(e)}"
+                )
+
+            # 5b. Partial unique index closing the race where a student
+            #     double-submitting POST /sessions for the same (scenario,
+            #     email) at the same moment could create two Play rows
+            #     instead of resuming their one existing play (the app-level
+            #     find-or-create check-then-insert is not atomic without
+            #     this). Scoped to scenario-code plays only (scenario_code
+            #     IS NOT NULL) — normal-mode "Play Now" always creates a
+            #     fresh play regardless of email and must stay unaffected.
+            try:
+                conn.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_plays_active_email "
+                    "ON plays (scenario_id, email) "
+                    f"WHERE completed = {completed_false} AND email IS NOT NULL AND scenario_code IS NOT NULL"
+                ))
+                conn.commit()
+            except Exception as e:
+                conn.rollback()
+                logger.error(
+                    f"Could not create ix_plays_active_email unique index — scenario-code play "
+                    f"duplicate-creation race is UNPROTECTED until this is resolved: {str(e)}"
                 )
 
             # 6. Unique index on quarter_results(play_id_fk, quarter) — DB-level
@@ -198,10 +216,12 @@ app.include_router(router, prefix="/api")
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-# instructor_dashboard.html deliberately lives OUTSIDE the /static mount (which
-# is served with no auth check on the raw file) — it must only ever be
-# reachable through /instructor, which requires HTTP Basic Auth below. Do not
-# move it back under static/ or add another route/mount that can reach it.
+# instructor_dashboard.html deliberately lives OUTSIDE the /static mount —
+# the HTML shell itself is public (same model as game.html: no data, just
+# UI), but every actual API call it makes is gated by require_instructor_session
+# (routes.py), checked against a signed session cookie set via /auth/instructor-
+# login. The dashboard's own JS shows a login form until that cookie exists.
+# Do not move it back under static/ or add another route/mount that can reach it.
 PRIVATE_DIR = Path(__file__).parent / "private"
 
 # ── Page routes ───────────────────────────────────────────────────────────────
@@ -212,8 +232,8 @@ def serve_game():
     return FileResponse(STATIC_DIR / "game.html", headers=headers)
 
 @app.get("/instructor", include_in_schema=False)
-def serve_instructor(username: str = Depends(authenticate_instructor)):
-    """Serve the instructor dashboard — gated by HTTP Basic Auth (env-var credentials)."""
+def serve_instructor():
+    """Serve the instructor dashboard shell — the page itself checks login status via /api/auth/instructor-me."""
     headers = {"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"}
     return FileResponse(PRIVATE_DIR / "instructor_dashboard.html", headers=headers)
 

@@ -170,9 +170,36 @@
 </head>
 <body>
 
+<!-- LOGIN SCREEN — instructor auth is a real login form + a browser-session-
+     only cookie, not HTTP Basic Auth, so the dashboard always asks again on
+     a fresh browser session (see auth.py's module docstring). -->
+<div id="login-screen" style="position:fixed;inset:0;z-index:200;background:var(--bg);display:none;align-items:center;justify-content:center;">
+  <div style="width:min(360px, 92vw);background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px 28px;text-align:center;">
+    <div class="logo-mark" style="width:48px;height:48px;font-size:22px;margin:0 auto 16px;">🚚</div>
+    <div style="font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:700;color:var(--accent);margin-bottom:4px;">Instructor Login</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:22px;">Sign in to manage scenarios and plays</p>
+    <div style="display:flex;flex-direction:column;gap:10px;text-align:left;">
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" id="login-username" autocomplete="username" onkeydown="if(event.key==='Enter')instructorLogin()"/>
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="login-password" autocomplete="current-password" onkeydown="if(event.key==='Enter')instructorLogin()"/>
+      </div>
+    </div>
+    <button class="btn btn-primary" style="width:100%;margin-top:18px;" onclick="instructorLogin()" id="login-btn">Log In</button>
+    <div id="login-error" style="font-size:12px;color:var(--red);margin-top:10px;min-height:16px;"></div>
+  </div>
+</div>
+
+<div id="dashboard-shell" style="display:none">
 <div class="topbar">
   <div class="logo"><div class="logo-mark">🚚</div>Supply Rush</div>
-  <span class="badge">INSTRUCTOR DASHBOARD</span>
+  <div style="display:flex;align-items:center;gap:14px;">
+    <span class="badge">INSTRUCTOR DASHBOARD</span>
+    <a href="#" style="font-size:12px;color:var(--muted);text-decoration:none;" onclick="event.preventDefault();instructorLogout();">Log Out</a>
+  </div>
 </div>
 
 <div class="layout">
@@ -533,6 +560,8 @@
 
   </main>
 </div>
+</div>
+<!-- /dashboard-shell -->
 
 <div id="toast">✓ Copied!</div>
 
@@ -1179,9 +1208,69 @@
     renderQuarterOverrideRows();
   }
 
-  // Populate the pinned-disaster table once on initial page load (the form's
-  // other fields are pre-filled directly in the static HTML; this table isn't).
-  renderQuarterOverrideRows();
+  // ── Instructor login (real form + session cookie, not HTTP Basic Auth —
+  // see auth.py's module docstring for why: Basic Auth gets silently cached
+  // by the browser for the rest of that browser session, so this dashboard
+  // would stay "logged in" for the next person on a shared computer) ───────
+  function checkInstructorAuth() {
+    fetch(`${API}/auth/instructor-me`)
+      .then(r => r.ok ? r.json() : { username: null })
+      .then(data => {
+        if (data.username) {
+          document.getElementById("login-screen").style.display = "none";
+          document.getElementById("dashboard-shell").style.display = "block";
+          renderQuarterOverrideRows();
+        } else {
+          document.getElementById("dashboard-shell").style.display = "none";
+          document.getElementById("login-screen").style.display = "flex";
+          document.getElementById("login-username").focus();
+        }
+      })
+      .catch(() => {
+        document.getElementById("dashboard-shell").style.display = "none";
+        document.getElementById("login-screen").style.display = "flex";
+      });
+  }
+
+  async function instructorLogin() {
+    const username = document.getElementById("login-username").value.trim();
+    const password = document.getElementById("login-password").value;
+    const errEl = document.getElementById("login-error");
+    const btn = document.getElementById("login-btn");
+    errEl.textContent = "";
+    if (!username || !password) { errEl.textContent = "Please enter both username and password."; return; }
+    btn.disabled = true; btn.textContent = "Logging in…";
+    try {
+      const res = await fetch(`${API}/auth/instructor-login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.detail || "Incorrect username or password.");
+      }
+      document.getElementById("login-password").value = "";
+      document.getElementById("login-screen").style.display = "none";
+      document.getElementById("dashboard-shell").style.display = "block";
+      renderQuarterOverrideRows();
+    } catch (e) {
+      errEl.textContent = e.message;
+    } finally {
+      btn.disabled = false; btn.textContent = "Log In";
+    }
+  }
+
+  async function instructorLogout() {
+    await fetch(`${API}/auth/instructor-logout`, { method: "POST" }).catch(() => {});
+    document.getElementById("dashboard-shell").style.display = "none";
+    document.getElementById("login-screen").style.display = "flex";
+    document.getElementById("login-username").value = "";
+    document.getElementById("login-password").value = "";
+    document.getElementById("login-username").focus();
+  }
+
+  checkInstructorAuth();
 </script>
 </body>
 </html>

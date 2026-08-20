@@ -6,7 +6,6 @@ import os
 import json
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -22,6 +21,7 @@ from schemas import (
     SellWarehouseRequest, SellVehicleRequest,
     QuarterResultOut, OutsourceZoneRequest,
     EmailCodeRequest, EmailCodeVerify,
+    InstructorLoginRequest,
 )
 from game_logic import (
     generate_code, generate_play_id,
@@ -33,7 +33,9 @@ from game_logic import (
     DEFAULT_WAREHOUSE_SLOTS, DEFAULT_DEMAND_POSITIONS,
 )
 from auth import (
-    authenticate_instructor, require_student_email, verification_required,
+    require_instructor_session, verify_instructor_credentials,
+    set_instructor_session_cookie, clear_instructor_session_cookie, get_instructor_session_username,
+    require_student_email, verification_required,
     set_session_cookie, clear_session_cookie, get_session_email,
     is_allowed_email, allowed_email_domain,
     create_verification_code, verify_code,
@@ -180,10 +182,32 @@ def logout(response: Response):
     return {"detail": "Logged out"}
 
 
+@router.post("/auth/instructor-login", tags=["auth"])
+def instructor_login(payload: InstructorLoginRequest, response: Response):
+    """Checks instructor credentials and, on success, sets a session cookie
+    (browser-session-only — see auth.set_instructor_session_cookie)."""
+    if not verify_instructor_credentials(payload.username, payload.password):
+        raise HTTPException(401, "Incorrect username or password.")
+    set_instructor_session_cookie(response, payload.username)
+    return {"username": payload.username}
+
+
+@router.post("/auth/instructor-logout", tags=["auth"])
+def instructor_logout(response: Response):
+    clear_instructor_session_cookie(response)
+    return {"detail": "Logged out"}
+
+
+@router.get("/auth/instructor-me", tags=["auth"])
+def instructor_me(request: Request):
+    """Lets the dashboard check login status without triggering a 401."""
+    return {"username": get_instructor_session_username(request)}
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  INSTRUCTOR — Scenario management
 # ─────────────────────────────────────────────────────────────────────────────
-@router.post("/scenarios", response_model=ScenarioOut, tags=["instructor"], dependencies=[Depends(authenticate_instructor)])
+@router.post("/scenarios", response_model=ScenarioOut, tags=["instructor"], dependencies=[Depends(require_instructor_session)])
 def create_scenario(payload: ScenarioCreate, db: Session = Depends(get_db)):
     """Instructor creates a scenario. Returns the unique code to share with students."""
     code = generate_code()
@@ -230,7 +254,7 @@ def create_scenario(payload: ScenarioCreate, db: Session = Depends(get_db)):
     return _parse_scenario(sc)
 
 
-@router.get("/scenarios", response_model=List[ScenarioOut], tags=["instructor"], dependencies=[Depends(authenticate_instructor)])
+@router.get("/scenarios", response_model=List[ScenarioOut], tags=["instructor"], dependencies=[Depends(require_instructor_session)])
 def list_scenarios(db: Session = Depends(get_db)):
     """Instructor view: list all saved scenarios."""
     scenarios = db.query(Scenario).all()
@@ -247,7 +271,7 @@ def get_scenario(code: str, db: Session = Depends(get_db)):
     return _parse_scenario(_get_scenario_or_404(code, db))
 
 
-@router.put("/scenarios/{code}", response_model=ScenarioOut, tags=["instructor"], dependencies=[Depends(authenticate_instructor)])
+@router.put("/scenarios/{code}", response_model=ScenarioOut, tags=["instructor"], dependencies=[Depends(require_instructor_session)])
 def update_scenario(code: str, payload: ScenarioUpdate, db: Session = Depends(get_db)):
     sc = _get_scenario_or_404(code, db)
     if payload.name            is not None: sc.name            = payload.name
@@ -296,7 +320,7 @@ def update_scenario(code: str, payload: ScenarioUpdate, db: Session = Depends(ge
     return _parse_scenario(sc)
 
 
-@router.delete("/scenarios/{code}", tags=["instructor"], dependencies=[Depends(authenticate_instructor)])
+@router.delete("/scenarios/{code}", tags=["instructor"], dependencies=[Depends(require_instructor_session)])
 def delete_scenario(code: str, db: Session = Depends(get_db)):
     sc = _get_scenario_or_404(code, db)
     plays = db.query(Play).filter(Play.scenario_id == sc.id).all()
@@ -314,7 +338,7 @@ def delete_scenario(code: str, db: Session = Depends(get_db)):
 # ─────────────────────────────────────────────────────────────────────────────
 #  INSTRUCTOR — Plays view (ALL plays across ALL scenarios)
 # ─────────────────────────────────────────────────────────────────────────────
-@router.get("/plays", tags=["instructor"], dependencies=[Depends(authenticate_instructor)])
+@router.get("/plays", tags=["instructor"], dependencies=[Depends(require_instructor_session)])
 def list_all_plays(
     db: Session = Depends(get_db),
     search: Optional[str] = Query(None, description="Filter by student name or scenario code"),
@@ -366,25 +390,25 @@ def list_all_plays(
 @router.post("/sessions", tags=["student"])
 def start_play(payload: PlayCreate, db: Session = Depends(get_db), email: str = Depends(require_student_email)):
     """
-    Student enters a scenario code (+ group name, required once student
-    verification is on) → joins the group's existing play if one already
-    exists for this scenario, otherwise creates one. This is the ONLY
-    mechanism for multiple students to land in the same shared play — there
-    is no separate join-by-link flow, so every group member calls this same
-    endpoint with the same (scenario_code, group_name) pair.
+    Student enters a scenario code → resumes their own existing play under
+    that scenario if they already started one (keyed by their verified
+    email), otherwise creates a fresh individual play. Team/group play was
+    removed — every play belongs to exactly one student, so switching who's
+    signed in on a shared computer (see /auth/logout) always lands each
+    student in their own play, never someone else's.
+
+    When verification is off there's no real per-student identity to key
+    on (every caller shares the same placeholder email) — every join then
+    always creates a fresh play, same as normal mode.
     """
     sc = _get_scenario_or_404(payload.scenario_code.upper(), db)
-    group_name = (payload.group_name or "").strip()
-
-    if verification_required() and not group_name:
-        raise HTTPException(400, "Please enter a group name.")
 
     play = None
-    if group_name:
+    if verification_required():
         play = (
             db.query(Play)
             .filter(Play.scenario_id == sc.id, Play.completed == False)
-            .filter(func.lower(Play.group_name) == group_name.lower())
+            .filter(Play.email == email)
             .first()
         )
 
@@ -403,7 +427,6 @@ def start_play(payload: PlayCreate, db: Session = Depends(get_db), email: str = 
         scenario_id=sc.id,
         student_name=payload.student_name,
         email=email,
-        group_name=group_name or None,
         current_quarter=0,   # Quarter 0 = setup phase, no demand/simulation
         cash=sc.starting_budget,
         quarterly_results=json.dumps([]),
@@ -415,14 +438,14 @@ def start_play(payload: PlayCreate, db: Session = Depends(get_db), email: str = 
     try:
         db.commit()
     except IntegrityError:
-        # Another request for the same (scenario, group_name) committed first
-        # (the partial unique index on plays closes this race) — join the
+        # Another request for the same (scenario, email) committed first
+        # (the partial unique index on plays closes this race) — resume the
         # play that won instead of failing the request.
         db.rollback()
         play = (
             db.query(Play)
             .filter(Play.scenario_id == sc.id, Play.completed == False)
-            .filter(func.lower(Play.group_name) == group_name.lower())
+            .filter(Play.email == email)
             .first()
         )
         if not play:
@@ -801,7 +824,7 @@ def sell_vehicle(play_id: str, payload: SellVehicleRequest, db: Session = Depend
     }
 
 
-@router.get("/sessions/{play_id}/warehouses", tags=["instructor"], dependencies=[Depends(authenticate_instructor)])
+@router.get("/sessions/{play_id}/warehouses", tags=["instructor"], dependencies=[Depends(require_instructor_session)])
 def get_warehouses(play_id: str, db: Session = Depends(get_db)):
     """Instructor-only: used by the play-details modal in the dashboard (not called by the student game)."""
     play = _get_play_or_404(play_id, db)
