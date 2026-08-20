@@ -294,9 +294,9 @@ def verify_code(db: Session, email: str, code: str) -> bool:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  Sending the code — SendGrid (single-sender verified address, no domain
-#  ownership needed) or Resend (requires a verified domain to reach arbitrary
-#  recipients). Falls back to a log line when neither is configured.
+#  Sending the code — Brevo or SendGrid (single-sender verified address, no
+#  domain ownership needed) or Resend (requires a verified domain to reach
+#  arbitrary recipients). Falls back to a log line when none are configured.
 # ─────────────────────────────────────────────────────────────────────────────
 def _parse_from_address(raw: str):
     """'Name <email@x.com>' -> (name, email); a bare address -> (None, address)."""
@@ -306,6 +306,27 @@ def _parse_from_address(raw: str):
         name = m.group(1).strip().strip('"')
         return (name or None), m.group(2).strip()
     return None, raw
+
+
+def _send_via_brevo(email: str, code: str, api_key: str, from_addr: str) -> None:
+    name, addr = _parse_from_address(from_addr)
+    sender_obj = {"email": addr, **({"name": name} if name else {})}
+
+    import requests
+    resp = requests.post(
+        "https://api.brevo.com/v3/smtp/email",
+        headers={"api-key": api_key, "Content-Type": "application/json", "accept": "application/json"},
+        json={
+            "sender": sender_obj,
+            "to": [{"email": email}],
+            "subject": "Your Supply Rush verification code",
+            "textContent": f"Your verification code is: {code}\n\nIt expires in {CODE_TTL_MINUTES} minutes.",
+        },
+        timeout=10,
+    )
+    if resp.status_code >= 300:
+        logger.error(f"Brevo API error sending to {email}: {resp.status_code} {resp.text}")
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Could not send verification email. Please try again.")
 
 
 def _send_via_sendgrid(email: str, code: str, api_key: str, from_addr: str) -> None:
@@ -351,10 +372,14 @@ def _send_via_resend(email: str, code: str, api_key: str, from_addr: str) -> Non
 
 
 def send_verification_email(email: str, code: str) -> None:
+    brevo_key = os.getenv("BREVO_API_KEY")
     sendgrid_key = os.getenv("SENDGRID_API_KEY")
     resend_key = os.getenv("RESEND_API_KEY")
     from_addr = os.getenv("EMAIL_FROM", "Supply Rush <onboarding@resend.dev>")
 
+    if brevo_key:
+        _send_via_brevo(email, code, brevo_key, from_addr)
+        return
     if sendgrid_key:
         _send_via_sendgrid(email, code, sendgrid_key, from_addr)
         return
@@ -365,4 +390,4 @@ def send_verification_email(email: str, code: str) -> None:
     # Local/dev fallback: log instead of sending. This only matters when
     # REQUIRE_STUDENT_VERIFICATION is explicitly turned on without any email
     # provider configured — normal local dev never reaches this code path.
-    logger.warning(f"[DEV — no SENDGRID_API_KEY/RESEND_API_KEY set] Verification code for {email}: {code}")
+    logger.warning(f"[DEV — no BREVO_API_KEY/SENDGRID_API_KEY/RESEND_API_KEY set] Verification code for {email}: {code}")
