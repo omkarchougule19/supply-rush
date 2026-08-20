@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Supply Rush — Handover Document</title>
+<style>
+  :root {
+    --bg: #070d18; --surface: #0a1220; --card: #101a2e; --border: #1a2840;
+    --accent: #FFD24A; --accent2: #FF9A3C; --blue: #60C8FF; --green: #4ADE80;
+    --red: #F87171; --text: #e2e8f5; --muted: #90a4c9;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', Inter, -apple-system, sans-serif;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 48px 32px 100px; }
+  h1 { font-size: 34px; font-weight: 800; color: var(--accent); margin: 0 0 6px; }
+  .subtitle { color: var(--muted); font-size: 15px; margin-bottom: 8px; }
+  .meta { color: var(--muted); font-size: 12.5px; margin-bottom: 36px; }
+  h2 {
+    font-size: 22px; font-weight: 700; color: var(--accent);
+    margin: 52px 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+  h3 { font-size: 16px; font-weight: 700; color: var(--blue); margin: 26px 0 10px; }
+  p { color: #cbd5f0; margin: 0 0 14px; }
+  ul, ol { color: #cbd5f0; padding-left: 22px; margin: 0 0 16px; }
+  li { margin-bottom: 6px; }
+  strong { color: var(--text); }
+  a { color: var(--blue); }
+  code {
+    background: var(--card); border: 1px solid var(--border); border-radius: 4px;
+    padding: 1px 6px; font-size: 13px; color: var(--accent); font-family: 'Consolas', monospace;
+  }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
+  th { text-align: left; color: var(--muted); text-transform: uppercase; font-size: 10.5px; letter-spacing: .06em; padding: 0 10px 8px; border-bottom: 1px solid var(--border); }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--border); color: #cbd5f0; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .toc { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px 26px; }
+  .toc-title { font-weight: 700; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 12px; }
+  .toc a { text-decoration: none; font-size: 14px; }
+  .toc a:hover { text-decoration: underline; }
+  .toc ol { columns: 2; column-gap: 32px; }
+  @media (max-width: 700px) { .toc ol { columns: 1; } }
+  .callout { border-left: 3px solid var(--accent); background: rgba(255,210,74,.06); border-radius: 0 8px 8px 0; padding: 12px 18px; margin: 16px 0; font-size: 13.5px; color: #cbd5f0; }
+  .callout.warn { border-color: var(--red); background: rgba(248,113,113,.07); }
+  .callout.green { border-color: var(--green); background: rgba(74,222,128,.06); }
+  .status-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 14px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .dot.live { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot.warn { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px 22px; margin: 18px 0; }
+  .pill { display: inline-block; background: #1a2840; color: var(--blue); border-radius: 6px; padding: 2px 9px; font-size: 11px; font-weight: 700; font-family: 'Consolas', monospace; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>📋 Supply Rush — Handover Document</h1>
+  <p class="subtitle">What this project is, what state it's in, and what a new maintainer needs to know.</p>
+  <p class="meta">Last updated: August 20, 2026 &nbsp;·&nbsp; Repo: <code>omkarchougule19/supply-rush</code> &nbsp;·&nbsp; Live: <a href="https://supply-rush.onrender.com">supply-rush.onrender.com</a></p>
+
+  <div class="toc">
+    <div class="toc-title">Contents</div>
+    <ol>
+      <li><a href="#status">Current Status</a></li>
+      <li><a href="#architecture">Architecture</a></li>
+      <li><a href="#files">Key Files</a></li>
+      <li><a href="#recent">Recent Work (This Session)</a></li>
+      <li><a href="#credentials">Credentials &amp; Secrets</a></li>
+      <li><a href="#debt">Known Limitations / Tech Debt</a></li>
+      <li><a href="#next">Suggested Next Steps</a></li>
+      <li><a href="#related">Related Documents</a></li>
+    </ol>
+  </div>
+
+  <h2 id="status">1. Current Status</h2>
+  <div class="card">
+    <div class="status-row"><span class="dot live"></span> Live and deployed at <a href="https://supply-rush.onrender.com">supply-rush.onrender.com</a> — commit <span class="pill">711b128</span></div>
+    <div class="status-row"><span class="dot live"></span> Database: Neon Postgres (external, connected via <code>DATABASE_URL</code>)</div>
+    <div class="status-row"><span class="dot warn"></span> Hosting: Render <strong>free tier</strong> — spins down after ~15 min idle, deploys must be triggered manually (no auto-deploy on push)</div>
+    <div class="status-row"><span class="dot warn"></span> Student email verification is currently <strong>enabled</strong> on the live deploy (left on from testing) — see §6 before running a real class</div>
+  </div>
+
+  <h2 id="architecture">2. Architecture</h2>
+  <p>A single FastAPI backend serves two plain HTML/JS single-page frontends (no build step, no framework) plus a JSON API under <code>/api</code>.</p>
+  <table>
+    <tr><th>Layer</th><th>What</th></tr>
+    <tr><td>Backend</td><td>FastAPI (Python), SQLAlchemy ORM, served by Gunicorn + Uvicorn workers in production</td></tr>
+    <tr><td>Database</td><td>Postgres in production (Neon), SQLite fallback for local dev — same code path either way</td></tr>
+    <tr><td>Student frontend</td><td><code>static/game.html</code> — one file, vanilla JS, no framework, no build step</td></tr>
+    <tr><td>Instructor frontend</td><td><code>private/instructor_dashboard.html</code> — same style, served outside the public <code>/static</code> mount</td></tr>
+    <tr><td>Hosting</td><td>Render (Docker web service), free tier</td></tr>
+    <tr><td>Email (student verification)</td><td>Brevo API (see <code>SETUP_GUIDE.html</code> §5 for why Brevo specifically)</td></tr>
+  </table>
+  <p>Both frontends follow the same pattern: the page itself is publicly fetchable (no data in the markup), and every actual data operation goes through an authenticated API call gated by a signed cookie — instructor sessions and student verification sessions are two completely independent cookies/mechanisms.</p>
+
+  <h2 id="files">3. Key Files</h2>
+  <table>
+    <tr><th>File</th><th>Role</th></tr>
+    <tr><td><code>main.py</code></td><td>App entrypoint, page routes (<code>/</code>, <code>/instructor</code>), startup DB migrations</td></tr>
+    <tr><td><code>routes.py</code></td><td>Every <code>/api/*</code> endpoint — scenarios, plays, quarters, auth</td></tr>
+    <tr><td><code>models.py</code></td><td>SQLAlchemy table definitions (Scenario, Play, PlacedWarehouse, QuarterResult, PlayMember, VerificationCode, AppSecret)</td></tr>
+    <tr><td><code>schemas.py</code></td><td>Pydantic request/response models</td></tr>
+    <tr><td><code>game_logic.py</code></td><td>The actual simulation — demand generation, quarter fulfillment, disruption rolls, map data</td></tr>
+    <tr><td><code>auth.py</code></td><td>Both auth systems: instructor session login and student email verification</td></tr>
+    <tr><td><code>database.py</code></td><td>SQLAlchemy engine/session setup, Postgres vs. SQLite switch</td></tr>
+    <tr><td><code>static/game.html</code></td><td>The entire student-facing game UI + client logic</td></tr>
+    <tr><td><code>private/instructor_dashboard.html</code></td><td>The entire instructor dashboard UI + client logic</td></tr>
+    <tr><td><code>GAME_LOGIC.md</code></td><td>Deep-dive narrative doc on simulation rules (pre-existing, still accurate for most mechanics)</td></tr>
+    <tr><td><code>rules.txt</code></td><td>Running engineering log of past feature passes (pre-existing convention)</td></tr>
+  </table>
+
+  <h2 id="recent">4. Recent Work (This Session)</h2>
+  <p>Chronological, most recent first. Every item below is deployed live.</p>
+  <ol>
+    <li><strong>Instructor login overhaul, team play removed, per-email identity</strong> (<code>711b128</code>) — Replaced HTTP Basic Auth (browser silently caches it, so the dashboard never actually re-prompted) with a real login form backed by a browser-session-only cookie. Removed the team/group-name play mechanic entirely; a scenario-code join now resumes the student's own play, keyed by their verified email. The student screen shows "Signed in as X" with a switch-identity link — needed because multiple students commonly share one classroom computer.</li>
+    <li><strong>Landing screen restructure</strong> (<code>fc22640</code>) — New Student/Instructor split landing page. Email verification (when required) now happens <em>before</em> a play is created, not reactively after a 401 — so the play is tied to the email from the start. Added <code>Play.email</code> column.</li>
+    <li><strong>Email provider migration</strong> (<code>34c28d3</code>, <code>5a48ca8</code>) — Discovered Resend's sandbox mode can't reach arbitrary student inboxes, and SendGrid's signup rejected the account. Landed on Brevo (see <code>SETUP_GUIDE.html</code> §5). Also hit and resolved a Brevo IP-allowlist rejection.</li>
+    <li><strong>Disruption popup + per-quarter pinning</strong> (<code>e180613</code>) — A toast now pops up (auto-dismiss 4s) whenever a quarter with a fired disruption starts. Instructors can now pin a specific disaster to a specific quarter at a specific severity, bypassing that event's random roll for that quarter only.</li>
+  </ol>
+  <div class="callout">
+    Prior to this session: instructor dashboard auth, student email verification (original Resend-only version), random disruption events, and outsourcing were already built (<code>bffa30b</code> and earlier).
+  </div>
+
+  <h2 id="credentials">5. Credentials &amp; Secrets</h2>
+  <p>No credentials are stored in this repo or these docs — everything lives in Render's environment variables for the live service. To find or rotate anything:</p>
+  <table>
+    <tr><th>What</th><th>Where</th></tr>
+    <tr><td>Database connection</td><td>Render → supply-rush → Environment → <code>DATABASE_URL</code> (points at the Neon project)</td></tr>
+    <tr><td>Instructor login</td><td>Render → Environment → <code>INSTRUCTOR_USERNAMES</code> / <code>INSTRUCTOR_PASSWORDS</code></td></tr>
+    <tr><td>Email sending</td><td>Render → Environment → <code>BREVO_API_KEY</code>, plus the Brevo account itself (brevo.com) for sender/IP management</td></tr>
+    <tr><td>Session signing</td><td>Auto-generated and DB-persisted if <code>SESSION_SECRET</code> is unset — no manual management needed</td></tr>
+  </table>
+  <div class="callout warn">
+    If <code>INSTRUCTOR_USERNAMES</code>/<code>PASSWORDS</code> are ever left unset in production, the app falls back to <code>admin</code> + a random password that's only visible in the Render logs (search for <code>[DEV — INSTRUCTOR_USERNAMES/PASSWORDS not set]</code>). Set real credentials before any real class uses this.
+  </div>
+
+  <h2 id="debt">6. Known Limitations / Tech Debt</h2>
+  <ul>
+    <li><strong>Free-tier hosting</strong> — Render's free web service spins down on idle (30–50s cold start) and requires a manual "Deploy latest commit" click after every push; there's no CI/CD auto-deploy configured.</li>
+    <li><strong>Brevo IP allowlist</strong> — if Render's outbound IP ever changes (not guaranteed static on the free tier), email sending will start failing with a 401 until the new IP is re-authorized in Brevo's dashboard.</li>
+    <li><strong>Student verification is currently ON in production</strong> — left enabled from testing this session, domain-restricted to <code>illinois.edu</code>. Turn off or reconfigure before general use if that's not intended.</li>
+    <li><strong><code>MAX_GROUP_SIZE</code> / <code>PlayMember</code> table</strong> — now vestigial. Team/group play was removed; every play has exactly one member (its owner) going forward. The table and env var are left in place rather than torn out, in case group play is reintroduced later.</li>
+    <li><strong>No automated test suite</strong> — verification for this session's changes was done via manual local server runs and live browser testing, not unit/integration tests. Worth adding pytest coverage for <code>game_logic.py</code>'s simulation logic especially.</li>
+    <li><strong>Old group-based Play rows</strong> — any plays created before the team-removal change keep their <code>group_name</code>, but re-joining that scenario code post-change no longer resumes them (a fresh individual play is created instead). Historic data isn't broken, just no longer the "current" play for those old groups.</li>
+  </ul>
+
+  <h2 id="next">7. Suggested Next Steps</h2>
+  <ul>
+    <li>Decide whether student verification should stay on for the live deploy, and if so, set <code>ALLOWED_STUDENT_EMAIL_DOMAIN</code> to the real school domain(s) intended.</li>
+    <li>Consider a paid Render instance (or another host) if cold-starts become disruptive during real class use.</li>
+    <li>Verify a real domain with Brevo (or another provider) for higher send volume / more reliable deliverability than the current single-sender setup.</li>
+    <li>Add basic automated tests around quarter simulation and disruption rolls before making further changes to <code>game_logic.py</code>.</li>
+  </ul>
+
+  <h2 id="related">8. Related Documents</h2>
+  <ul>
+    <li><a href="SETUP_GUIDE.html">SETUP_GUIDE.html</a> — step-by-step for running this locally or deploying it fresh</li>
+    <li><a href="GAME_GUIDE.html">GAME_GUIDE.html</a> — how the game itself works, for students/instructors</li>
+    <li><code>GAME_LOGIC.md</code> (repo root) — deep technical narrative on simulation rules</li>
+    <li><code>rules.txt</code> (repo root) — running log of past engineering passes</li>
+  </ul>
+
+</div>
+</body>
+</html>

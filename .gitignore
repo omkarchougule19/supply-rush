@@ -33,4 +33,5 @@ Thumbs.db
 *.jpeg
 *.gif
 *.webp
+!docs/images/*
 supply_rush_final_map_responsive.html

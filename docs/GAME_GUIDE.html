@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Supply Rush — Game Guide</title>
+<style>
+  :root {
+    --bg: #070d18; --surface: #0a1220; --card: #101a2e; --border: #1a2840;
+    --accent: #FFD24A; --accent2: #FF9A3C; --blue: #60C8FF; --green: #4ADE80;
+    --red: #F87171; --text: #e2e8f5; --muted: #90a4c9;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', Inter, -apple-system, sans-serif;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 48px 32px 100px; }
+  h1 { font-size: 34px; font-weight: 800; color: var(--accent); margin: 0 0 6px; }
+  .subtitle { color: var(--muted); font-size: 15px; margin-bottom: 36px; }
+  h2 {
+    font-size: 22px; font-weight: 700; color: var(--accent);
+    margin: 52px 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+  h3 { font-size: 16px; font-weight: 700; color: var(--blue); margin: 26px 0 10px; }
+  p { color: #cbd5f0; margin: 0 0 14px; }
+  ul, ol { color: #cbd5f0; padding-left: 22px; margin: 0 0 16px; }
+  li { margin-bottom: 6px; }
+  strong { color: var(--text); }
+  code {
+    background: var(--card); border: 1px solid var(--border); border-radius: 4px;
+    padding: 1px 6px; font-size: 13px; color: var(--accent); font-family: 'Consolas', monospace;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px 22px; margin: 18px 0;
+  }
+  .card-title { font-weight: 700; color: var(--text); margin-bottom: 8px; font-size: 14px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  @media (max-width: 700px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .stat-card .label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 6px; }
+  .stat-card .val { font-size: 15px; font-weight: 700; color: var(--text); }
+  figure { margin: 22px 0; }
+  figure img {
+    width: 100%; border-radius: 10px; border: 1px solid var(--border);
+    box-shadow: 0 8px 24px rgba(0,0,0,.4); display: block;
+  }
+  figcaption { font-size: 12.5px; color: var(--muted); margin-top: 8px; text-align: center; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; color: var(--muted); text-transform: uppercase; font-size: 10.5px; letter-spacing: .06em; padding: 0 10px 8px; border-bottom: 1px solid var(--border); }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--border); color: #cbd5f0; }
+  tr:last-child td { border-bottom: none; }
+  .pill { display: inline-block; background: #1a2840; color: var(--blue); border-radius: 6px; padding: 2px 9px; font-size: 11px; font-weight: 700; }
+  .pill.red { color: var(--red); }
+  .pill.green { color: var(--green); }
+  .toc { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px 26px; }
+  .toc-title { font-weight: 700; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 12px; }
+  .toc a { color: var(--blue); text-decoration: none; font-size: 14px; }
+  .toc a:hover { text-decoration: underline; }
+  .toc ol { columns: 2; column-gap: 32px; }
+  @media (max-width: 700px) { .toc ol { columns: 1; } }
+  .callout { border-left: 3px solid var(--accent); background: rgba(255,210,74,.06); border-radius: 0 8px 8px 0; padding: 12px 18px; margin: 16px 0; font-size: 13.5px; color: #cbd5f0; }
+  .callout.blue { border-color: var(--blue); background: rgba(96,200,255,.06); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>🚚 Supply Rush — Game Guide</h1>
+  <p class="subtitle">What the game is, how a student plays it, and how an instructor runs a class on it.</p>
+
+  <div class="toc">
+    <div class="toc-title">Contents</div>
+    <ol>
+      <li><a href="#overview">What Supply Rush Is</a></li>
+      <li><a href="#roles">Two Roles: Student &amp; Instructor</a></li>
+      <li><a href="#student-flow">Student Flow, Start to Finish</a></li>
+      <li><a href="#mechanics">Core Game Mechanics</a></li>
+      <li><a href="#disruptions">Disruption Events</a></li>
+      <li><a href="#outsourcing">Outsourcing (3PL)</a></li>
+      <li><a href="#instructor-flow">Instructor Flow</a></li>
+      <li><a href="#gating">Pacing a Class (Quarter Gating)</a></li>
+      <li><a href="#glossary">Quick Glossary</a></li>
+    </ol>
+  </div>
+
+  <h2 id="overview">1. What Supply Rush Is</h2>
+  <p>Supply Rush is a browser-based supply chain management simulation built for classroom use. A student runs a fictional last-mile delivery company over a Chicago map: build warehouses, buy delivery vehicles, and try to profitably meet customer demand quarter after quarter, while an instructor can shape the scenario's economics and even script real-world-style disruptions into specific quarters.</p>
+  <p>It's played entirely in the browser — no install for students. An instructor creates a <strong>scenario</strong> (a full configuration of prices, budgets, map, disruption rules, etc.), gets a short <strong>class code</strong>, and shares it with the class.</p>
+
+  <figure>
+    <img src="images/01_landing.jpg" alt="Landing screen">
+    <figcaption>The landing screen — every visit starts here.</figcaption>
+  </figure>
+
+  <h2 id="roles">2. Two Roles: Student &amp; Instructor</h2>
+  <p>The landing screen offers exactly two paths:</p>
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title">🎓 Student</div>
+      <p style="margin:0">Play solo with default settings, or join a class using an instructor's code. May need to verify a school email first, depending on how the instructor configured things.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">🧑‍🏫 Instructor</div>
+      <p style="margin:0">Log in with instructor credentials to create/manage scenarios, generate class codes, and watch every group's progress in real time.</p>
+    </div>
+  </div>
+
+  <h2 id="student-flow">3. Student Flow, Start to Finish</h2>
+
+  <h3>3.1 Choosing how to play</h3>
+  <figure>
+    <img src="images/02_student_screen.jpg" alt="Student sub-screen">
+    <figcaption>Student sub-screen: play with no scenario, or join with a class code.</figcaption>
+  </figure>
+  <p>After tapping <strong>Student</strong>, there are two options:</p>
+  <ul>
+    <li><strong>Play Now</strong> — a solo run on the built-in default scenario. No code needed.</li>
+    <li><strong>Join Scenario</strong> — enter the class code an instructor shared. This loads whatever settings, map, and disruption rules that instructor configured.</li>
+  </ul>
+
+  <h3>3.2 Email verification (if the instructor requires it)</h3>
+  <p>Some classes require every student to verify a school email with a one-time 6-digit code before playing. If so, this screen appears the moment a mode is chosen — <em>before</em> the play is actually created, so the resulting session is tied to that email from the start. If a student already verified earlier in the same browser session, this step is skipped automatically, and the student screen shows <strong>“Signed in as &lt;name&gt;”</strong> with a link to sign in as someone else — important on a shared classroom computer where several students take turns.</p>
+  <div class="callout blue">If verification isn't required for a scenario, this whole step is invisible — students go straight from picking a mode into the game.</div>
+
+  <h3>3.3 Setup phase (Quarter 0)</h3>
+  <p>Every play starts in a <strong>Setup</strong> phase — no demand yet, just a chance to plant an opening warehouse (or several) before quarter 1 actually runs. Tap any dashed "+" slot on the map to open the build panel.</p>
+  <figure>
+    <img src="images/03_setup_map.jpg" alt="Setup phase map">
+    <figcaption>Setup phase — dashed squares are open warehouse slots.</figcaption>
+  </figure>
+  <figure>
+    <img src="images/04_build_warehouse.jpg" alt="Build warehouse panel">
+    <figcaption>Choosing a warehouse type — small / medium / large, each with its own cost, capacity, build time, and overhead.</figcaption>
+  </figure>
+  <figure>
+    <img src="images/05_warehouse_vehicles.jpg" alt="Warehouse vehicle panel">
+    <figcaption>Once a warehouse exists, buy trucks and/or drones for it — a warehouse alone can't deliver anything.</figcaption>
+  </figure>
+
+  <h3>3.4 Running quarters</h3>
+  <p>Hitting <strong>Start Game</strong> (Setup) or <strong>Run Quarter</strong> (every quarter after) simulates one quarter: demand is generated, fulfilled as far as capacity allows, revenue and costs are booked, and cash updates. The map shows live demand pins and delivery routes before running.</p>
+  <figure>
+    <img src="images/06_quarter1_demand.jpg" alt="Quarter demand view">
+    <figcaption>A quarter about to run — pins are demand, dashed lines are routes to the nearest active warehouse.</figcaption>
+  </figure>
+  <figure>
+    <img src="images/07_quarter_results.jpg" alt="Quarter results panel">
+    <figcaption>Results after running a quarter — P&amp;L, utilization, stockouts, and cash all update immediately.</figcaption>
+  </figure>
+  <p>This repeats for every quarter in the scenario (commonly 12–20). Along the way, a student can buy/sell more warehouses and vehicles, and — if the instructor enabled it — outsource specific demand zones to a third party (see §6).</p>
+
+  <h3>3.5 Game over</h3>
+  <p>After the last quarter, a summary screen shows the full run: cash trajectory, revenue vs. spending, capacity vs. demand, fulfillment rates, and utilization — charted over every quarter played.</p>
+
+  <h2 id="mechanics">4. Core Game Mechanics</h2>
+
+  <h3>4.1 Warehouses</h3>
+  <p>Three sizes, each an instructor-tunable tradeoff between cost, capacity, and how long it takes to come online:</p>
+  <table>
+    <tr><th>Type</th><th>Default Cost</th><th>Capacity/qtr</th><th>Build Time</th><th>Overhead/qtr</th></tr>
+    <tr><td>Small</td><td>$250,000</td><td>500 orders</td><td>1 quarter</td><td>$20,000</td></tr>
+    <tr><td>Medium</td><td>$500,000</td><td>1,200 orders</td><td>2 quarters</td><td>$30,000</td></tr>
+    <tr><td>Large</td><td>$800,000</td><td>2,500 orders</td><td>4 quarters</td><td>$40,000</td></tr>
+  </table>
+  <p>A warehouse under construction shows a wrench icon and serves no demand until it finishes. Overhead is charged every quarter it's active, whether or not it ships anything — an idle warehouse still costs money.</p>
+
+  <h3>4.2 Vehicles</h3>
+  <p>Vehicles live inside a warehouse and are what actually deliver orders — capacity is capped by the smaller of "warehouse capacity" and "total vehicle capacity assigned to it."</p>
+  <table>
+    <tr><th>Type</th><th>Default Cost</th><th>Capacity/qtr</th><th>Op. Cost/qtr</th><th>Serves</th></tr>
+    <tr><td>🚛 Truck</td><td>$20,000</td><td>200 orders</td><td>$800</td><td>Non-urgent only</td></tr>
+    <tr><td>✈️ Drone</td><td>$9,000</td><td>60 orders</td><td>$800</td><td>Urgent + non-urgent</td></tr>
+  </table>
+  <p>Drones are the only vehicle that can serve urgent orders by default — a common early strategic tension between cheap truck capacity and flexible-but-pricier drone capacity.</p>
+
+  <h3>4.3 Demand</h3>
+  <p>Each quarter, a set of map zones generates <strong>urgent</strong> and <strong>non-urgent</strong> orders. Not every zone is visible from the start — a scenario reveals more zones progressively as the game goes on, so the map genuinely grows over a run. Demand a warehouse can't reach (out of its service radius) or doesn't have spare capacity for goes unfulfilled — a <strong>stockout</strong>.</p>
+
+  <h3>4.4 Money</h3>
+  <p>Revenue = fulfilled orders × price-per-order (urgent pays more). Costs = every active vehicle's operating cost + every active warehouse's overhead + any outsourcing fees. Profit rolls straight into cash — there's no loan mechanic, so cash can go negative if a student overspends relative to what they can actually deliver; the UI locks further actions until the debt is resolved.</p>
+
+  <h2 id="disruptions">5. Disruption Events</h2>
+  <p>An instructor can layer unpredictable shocks onto a scenario — off by default. Three kinds:</p>
+  <div class="grid3">
+    <div class="card"><div class="card-title">🌎 Earthquake</div><p style="margin:0;font-size:13.5px">Cuts one specific warehouse's effective capacity for a quarter.</p></div>
+    <div class="card"><div class="card-title">❄️ Harsh Winter</div><p style="margin:0;font-size:13.5px">Cuts every drone's capacity fleet-wide for a quarter.</p></div>
+    <div class="card"><div class="card-title">⛽ Fuel Hike</div><p style="margin:0;font-size:13.5px">Raises every truck's operating cost for a quarter.</p></div>
+  </div>
+  <p>Each can either fire <strong>randomly</strong> (instructor sets a per-quarter probability and severity range — every group under the same class code sees the identical roll, so it's fair) or be <strong>pinned</strong> by the instructor to an exact quarter at an exact severity, guaranteeing a specific case-study beat happens.</p>
+  <p>Whenever a quarter with a fired disruption starts, a small popup appears on screen for a few seconds so no group misses it — it's also listed persistently in the sidebar's Disruption Forecast.</p>
+
+  <h2 id="outsourcing">6. Outsourcing (3PL)</h2>
+  <p>If a scenario allows it, a student can toggle any individual demand zone to be handled by a third-party carrier instead of their own fleet. Outsourced zones are always 100% fulfilled instantly at a configured cost-per-order, completely bypassing warehouse/vehicle capacity — useful for covering a gap the student's own network can't reach, at a price. A zone stays outsourced until toggled back off.</p>
+
+  <h2 id="instructor-flow">7. Instructor Flow</h2>
+  <figure>
+    <img src="images/08_instructor_login.jpg" alt="Instructor login screen">
+    <figcaption>Instructor login — a real form, session-only (logs out when the browser closes), not a browser-cached popup.</figcaption>
+  </figure>
+  <p>After logging in, the dashboard has three sections:</p>
+  <ul>
+    <li><strong>Create New</strong> — the full scenario editor: game structure (quarters, budget), order pricing, demand parameters, sell/move rules, outsourcing, disruption events (random + pinned-per-quarter), warehouse &amp; vehicle configs, and the map itself. Saving generates a shareable class code.</li>
+    <li><strong>My Scenarios</strong> — every scenario this instructor has created, with its code.</li>
+    <li><strong>All Plays</strong> — every group/play across every scenario, searchable and filterable by status, with per-play drill-down.</li>
+  </ul>
+
+  <h2 id="gating">8. Pacing a Class (Quarter Gating)</h2>
+  <p>An instructor can set an <strong>unlocked quarter</strong> ceiling on a scenario — once turned on, no group can run a quarter past whatever's been released, keeping the whole class in lockstep (e.g. everyone stops at Q4 for a mid-game discussion). Students see a simply-disabled Run Quarter button with a lock icon, not an error.</p>
+
+  <h2 id="glossary">9. Quick Glossary</h2>
+  <table>
+    <tr><th>Term</th><th>Meaning</th></tr>
+    <tr><td>Scenario</td><td>An instructor's full configuration — prices, budget, map, disruption rules. Has a shareable code.</td></tr>
+    <tr><td>Play</td><td>One student's actual game session under a scenario — their own warehouses, cash, and history.</td></tr>
+    <tr><td>Quarter</td><td>One simulated time step. Quarter 0 is setup-only; the real game runs quarters 1..N.</td></tr>
+    <tr><td>Stockout</td><td>Demand that went unfulfilled that quarter — no capacity/reach to serve it.</td></tr>
+    <tr><td>Utilization</td><td>How much of available fleet capacity was actually used.</td></tr>
+    <tr><td>Serving %</td><td>Share of total demand actually fulfilled.</td></tr>
+  </table>
+
+</div>
+</body>
+</html>

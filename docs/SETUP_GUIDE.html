@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Supply Rush — Setup Guide</title>
+<style>
+  :root {
+    --bg: #070d18; --surface: #0a1220; --card: #101a2e; --border: #1a2840;
+    --accent: #FFD24A; --accent2: #FF9A3C; --blue: #60C8FF; --green: #4ADE80;
+    --red: #F87171; --text: #e2e8f5; --muted: #90a4c9;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', Inter, -apple-system, sans-serif;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 48px 32px 100px; }
+  h1 { font-size: 34px; font-weight: 800; color: var(--accent); margin: 0 0 6px; }
+  .subtitle { color: var(--muted); font-size: 15px; margin-bottom: 36px; }
+  h2 {
+    font-size: 22px; font-weight: 700; color: var(--accent);
+    margin: 52px 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+  h3 { font-size: 16px; font-weight: 700; color: var(--blue); margin: 26px 0 10px; }
+  p { color: #cbd5f0; margin: 0 0 14px; }
+  ul, ol { color: #cbd5f0; padding-left: 22px; margin: 0 0 16px; }
+  li { margin-bottom: 6px; }
+  strong { color: var(--text); }
+  a { color: var(--blue); }
+  code {
+    background: var(--card); border: 1px solid var(--border); border-radius: 4px;
+    padding: 1px 6px; font-size: 13px; color: var(--accent); font-family: 'Consolas', monospace;
+  }
+  pre {
+    background: #05090f; border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 18px; overflow-x: auto; font-size: 13px; line-height: 1.55;
+    font-family: 'Consolas', monospace; color: #d6e2ff; margin: 14px 0;
+  }
+  pre code { background: none; border: none; padding: 0; color: inherit; }
+  .step {
+    display: flex; gap: 16px; margin: 20px 0;
+  }
+  .step-num {
+    flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%;
+    background: linear-gradient(135deg,var(--accent),var(--accent2)); color: #0a1220;
+    display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px;
+  }
+  .step-body { flex: 1; padding-top: 3px; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
+  th { text-align: left; color: var(--muted); text-transform: uppercase; font-size: 10.5px; letter-spacing: .06em; padding: 0 10px 8px; border-bottom: 1px solid var(--border); }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--border); color: #cbd5f0; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .toc { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px 26px; }
+  .toc-title { font-weight: 700; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 12px; }
+  .toc a { text-decoration: none; font-size: 14px; }
+  .toc a:hover { text-decoration: underline; }
+  .toc ol { columns: 2; column-gap: 32px; }
+  @media (max-width: 700px) { .toc ol { columns: 1; } }
+  .callout { border-left: 3px solid var(--accent); background: rgba(255,210,74,.06); border-radius: 0 8px 8px 0; padding: 12px 18px; margin: 16px 0; font-size: 13.5px; color: #cbd5f0; }
+  .callout.warn { border-color: var(--red); background: rgba(248,113,113,.07); }
+  .callout.blue { border-color: var(--blue); background: rgba(96,200,255,.06); }
+  figure { margin: 22px 0; }
+  figure img { width: 100%; border-radius: 10px; border: 1px solid var(--border); box-shadow: 0 8px 24px rgba(0,0,0,.4); display: block; }
+  figcaption { font-size: 12.5px; color: var(--muted); margin-top: 8px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>⚙️ Supply Rush — Setup Guide</h1>
+  <p class="subtitle">Getting the project running locally, and deploying it fresh to a new system.</p>
+
+  <div class="toc">
+    <div class="toc-title">Contents</div>
+    <ol>
+      <li><a href="#prereqs">Prerequisites</a></li>
+      <li><a href="#local">Run It Locally</a></li>
+      <li><a href="#envvars">Environment Variables Reference</a></li>
+      <li><a href="#database">Database</a></li>
+      <li><a href="#email">Student Email Verification (Optional)</a></li>
+      <li><a href="#instructor-auth">Instructor Login</a></li>
+      <li><a href="#deploy">Deploying to Render</a></li>
+      <li><a href="#verify">Verifying a Deploy</a></li>
+      <li><a href="#troubleshoot">Troubleshooting — Real Issues We Hit</a></li>
+    </ol>
+  </div>
+
+  <h2 id="prereqs">1. Prerequisites</h2>
+  <ul>
+    <li><strong>Python 3.11+</strong></li>
+    <li><strong>git</strong></li>
+    <li>A GitHub account with push access to the repo (for deploying)</li>
+    <li>A <a href="https://render.com" target="_blank">Render.com</a> account (current hosting) — or any host that can run a Docker container / Python web service</li>
+  </ul>
+
+  <h2 id="local">2. Run It Locally</h2>
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <strong>Clone and enter the repo</strong>
+      <pre><code>git clone https://github.com/omkarchougule19/supply-rush.git
+cd supply-rush</code></pre>
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <strong>Install dependencies</strong> (a virtualenv is recommended but not required)
+      <pre><code>pip install -r requirements.txt</code></pre>
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <strong>Copy the env template</strong> and adjust anything you need (everything has a safe local-dev default — you can skip this for a first run)
+      <pre><code>cp .env.example .env</code></pre>
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-body">
+      <strong>Run the server</strong>
+      <pre><code>uvicorn main:app --reload --port 8000</code></pre>
+      <p>Then open <code>http://127.0.0.1:8000/</code> for the student game, or <code>http://127.0.0.1:8000/instructor</code> for the dashboard.</p>
+    </div>
+  </div>
+  <div class="callout blue">
+    With no env vars set, the app quietly uses sensible defaults: a local SQLite file (<code>supply_rush.db</code>), no student verification required, and an instructor login of <code>admin</code> / a random password that's <strong>printed once to the server console</strong> the first time you hit <code>/instructor</code> — search the log for a line starting <code>[DEV — INSTRUCTOR_USERNAMES/PASSWORDS not set]</code>.
+  </div>
+
+  <h2 id="envvars">3. Environment Variables Reference</h2>
+  <table>
+    <tr><th>Variable</th><th>Default</th><th>What it does</th></tr>
+    <tr><td><code>DATABASE_URL</code></td><td>local SQLite file</td><td>Postgres connection string in production. Any standard <code>postgresql://...</code> URL works — see §4.</td></tr>
+    <tr><td><code>ALLOWED_ORIGINS</code></td><td>unset (open)</td><td>Comma-separated CORS allowlist. Set to your real domain in production.</td></tr>
+    <tr><td><code>INSTRUCTOR_USERNAMES</code> / <code>INSTRUCTOR_PASSWORDS</code></td><td>unset → random fallback</td><td>Comma-separated, order-matched lists for multiple instructors. Leave both unset for the auto-generated fallback (fine for a single-instructor local/dev setup, not recommended for a real class).</td></tr>
+    <tr><td><code>REQUIRE_STUDENT_VERIFICATION</code></td><td><code>false</code></td><td>Set <code>true</code> to force every student to verify a school email before playing.</td></tr>
+    <tr><td><code>ALLOWED_STUDENT_EMAIL_DOMAIN</code></td><td><code>illinois.edu</code></td><td>Only emails ending in this domain are accepted. Blank = any domain allowed.</td></tr>
+    <tr><td><code>BREVO_API_KEY</code> / <code>SENDGRID_API_KEY</code> / <code>RESEND_API_KEY</code></td><td>unset</td><td>One of these actually sends the verification email. See §5 — <strong>Brevo is recommended.</strong></td></tr>
+    <tr><td><code>EMAIL_FROM</code></td><td><code>Supply Rush &lt;onboarding@resend.dev&gt;</code></td><td>Must be an address your active email provider actually lets you send from.</td></tr>
+    <tr><td><code>SESSION_SECRET</code></td><td>unset → random fallback</td><td>Signs student/instructor session cookies. Only set explicitly if sessions must survive a database swap.</td></tr>
+    <tr><td><code>COOKIE_SECURE</code></td><td><code>true</code></td><td>Set <code>false</code> only for local HTTP (no TLS) testing.</td></tr>
+    <tr><td><code>MAX_GROUP_SIZE</code></td><td>60</td><td>Legacy — team play was removed, this no longer has any effect.</td></tr>
+    <tr><td><code>HIDE_DOCS</code></td><td>unset</td><td>Set <code>true</code> to hide the auto-generated <code>/docs</code> API explorer in production.</td></tr>
+  </table>
+
+  <h2 id="database">4. Database</h2>
+  <p>Defaults to a local SQLite file with zero setup. For a real deployment, use Postgres — the current live deployment uses <a href="https://neon.tech" target="_blank">Neon</a> (free tier, serverless Postgres):</p>
+  <ol>
+    <li>Create a Neon project (or any Postgres host — RDS, Supabase, Render's own Postgres add-on, etc.)</li>
+    <li>Copy its connection string</li>
+    <li>Set <code>DATABASE_URL=postgresql://...</code> in your environment</li>
+  </ol>
+  <p>The app runs its own migrations automatically on startup (self-healing — it checks for missing columns/indexes and adds them, safe to run every boot). No separate migration command needed.</p>
+
+  <h2 id="email">5. Student Email Verification (Optional)</h2>
+  <p>Skip this whole section if <code>REQUIRE_STUDENT_VERIFICATION</code> stays <code>false</code> — nothing else in this section matters.</p>
+  <p>If you do turn it on, you need a real email-sending provider. We tried all three supported ones and landed on a clear recommendation:</p>
+  <table>
+    <tr><th>Provider</th><th>Verdict</th></tr>
+    <tr><td><strong>Brevo</strong> ✅ recommended</td><td>Signup is lenient, single-sender verification is just a confirmation-link click (no domain/DNS needed), and — critically — <strong>no sandbox recipient restriction</strong>. Can email any real inbox immediately.</td></tr>
+    <tr><td>SendGrid</td><td>Same single-sender idea as Brevo, but its signup fraud screening rejected our account outright. Your mileage may vary.</td></tr>
+    <tr><td>Resend</td><td>Simplest API, but sandbox mode can <em>only</em> email the address your own Resend account is registered under — useless for reaching real students until you verify a domain you own.</td></tr>
+  </table>
+
+  <h3>Setting up Brevo</h3>
+  <div class="step"><div class="step-num">1</div><div class="step-body">Sign up at <a href="https://brevo.com" target="_blank">brevo.com</a>.</div></div>
+  <div class="step"><div class="step-num">2</div><div class="step-body">Settings → Senders, domains, IPs → verify a single sender address (the confirmation email arrives fast — click the link).</div></div>
+  <div class="step"><div class="step-num">3</div><div class="step-body">Settings → SMTP &amp; API → API Keys → generate one.</div></div>
+  <div class="step"><div class="step-num">4</div><div class="step-body">Set <code>BREVO_API_KEY</code> and <code>EMAIL_FROM</code> (the address you just verified) in your environment.</div></div>
+  <div class="callout warn">
+    <strong>Gotcha we actually hit:</strong> Brevo has an IP allowlist security feature <em>on by default</em>. The very first send from a new server IP gets rejected with <code>401 unrecognised IP address</code>. Fix: Settings → Security → Authorized IPs → find it under the "Unauthorized IP addresses" tab and click the checkmark to authorize it. This has to be repeated if your host's outbound IP changes (e.g. Render doesn't guarantee a static IP on the free tier).
+  </div>
+  <p>Without any of the three keys set, verification codes are simply logged to the server console instead of emailed — handy for local testing of the flow without any provider configured at all.</p>
+
+  <h2 id="instructor-auth">6. Instructor Login</h2>
+  <p>The dashboard uses a real login form backed by a <strong>browser-session-only cookie</strong> — not HTTP Basic Auth. This is deliberate: Basic Auth credentials get silently cached by the browser for the rest of that browser session, so a shared classroom computer would stay "logged in" for whoever opens the dashboard next. The session cookie here has no persistence beyond closing the browser, and there's a working Log Out button.</p>
+  <p>Set real credentials for production:</p>
+  <pre><code>INSTRUCTOR_USERNAMES=admin,prof_smith
+INSTRUCTOR_PASSWORDS=a-real-password,another-real-password</code></pre>
+
+  <h2 id="deploy">7. Deploying to Render</h2>
+  <p>The repo ships a <code>Dockerfile</code>, so any Docker-friendly host works. For Render specifically:</p>
+  <div class="step"><div class="step-num">1</div><div class="step-body">New → Web Service → connect the GitHub repo.</div></div>
+  <div class="step"><div class="step-num">2</div><div class="step-body">Runtime: <strong>Docker</strong> (it will pick up the repo's Dockerfile automatically).</div></div>
+  <div class="step"><div class="step-num">3</div><div class="step-body">Add the environment variables from §3 under Environment. At minimum for a real class: <code>DATABASE_URL</code>, <code>INSTRUCTOR_USERNAMES</code>/<code>PASSWORDS</code>, and (if using verification) <code>REQUIRE_STUDENT_VERIFICATION</code>, <code>ALLOWED_STUDENT_EMAIL_DOMAIN</code>, <code>BREVO_API_KEY</code>, <code>EMAIL_FROM</code>.</div></div>
+  <div class="step"><div class="step-num">4</div><div class="step-body">Deploy. Render's free tier only deploys on an explicit trigger (Manual Deploy → Deploy latest commit) — pushing to GitHub alone does <strong>not</strong> auto-deploy on this plan.</div></div>
+  <div class="callout warn">
+    Render's free web service tier spins down after ~15 minutes of inactivity — the next request pays a 30–50s cold-start penalty. Fine for a demo/class; upgrade to a paid instance if that's a problem.
+  </div>
+
+  <h2 id="verify">8. Verifying a Deploy</h2>
+  <p>Two endpoints answer instantly and tell you exactly what's configured, without needing to click through any UI:</p>
+  <pre><code>curl https://your-domain/api/auth/me
+# {"email": null, "verification_required": true/false}
+
+curl https://your-domain/api/auth/instructor-me
+# {"username": null}   ← confirms the instructor login endpoint is alive</code></pre>
+
+  <h2 id="troubleshoot">9. Troubleshooting — Real Issues We Hit</h2>
+  <table>
+    <tr><th>Symptom</th><th>Cause &amp; Fix</th></tr>
+    <tr><td><code>Could not send verification email</code></td><td><code>EMAIL_FROM</code> is set to an address your provider doesn't actually let you send from (e.g. a student's own address instead of your verified sender). Fix <code>EMAIL_FROM</code>.</td></tr>
+    <tr><td>Resend: <code>You can only send testing emails to your own email address</code></td><td>Resend sandbox limitation — switch to Brevo (§5), or verify a domain you own with Resend.</td></tr>
+    <tr><td>Brevo: <code>401 unrecognised IP address</code></td><td>Authorize the server's IP in Brevo → Security → Authorized IPs (see the callout in §5).</td></tr>
+    <tr><td>Render Manual Deploy fails with "Service Unavailable"</td><td>Check <a href="https://status.render.com" target="_blank">status.render.com</a> — this was a genuine platform-wide outage on Render's end when we hit it, not a config problem. Just wait it out.</td></tr>
+    <tr><td>Instructor dashboard shows "unauthorized" errors on every action</td><td>The session cookie expired or was never set — log out and back in via <code>/instructor</code>.</td></tr>
+  </table>
+
+</div>
+</body>
+</html>
