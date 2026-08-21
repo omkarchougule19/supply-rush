@@ -25,6 +25,14 @@ DEFAULT_WAREHOUSE_SLOTS = [
     {"id":"s7", "x":39.80, "y":30.39},
     {"id":"s8", "x":43.50, "y":55.50}, {"id":"s9", "x":63.50, "y":31.50}, {"id":"s10", "x":66.50, "y":62.50},
     {"id":"s11", "x":48.50, "y":25.50},
+    # s12-s14: added later via the same validation approach as demand zones
+    # d43-d70 above — jittered 8-14 units off an existing validated warehouse
+    # slot at a random angle, rejecting any candidate landing within 6 units
+    # of the already-validated points' own bounding envelope edge (32.24-
+    # 77.96 x, 14.17-96.79 y) or within 4 units of any existing warehouse/
+    # demand point, so each inherits its base point's confirmed-valid
+    # location while staying well clear of the map boundary.
+    {"id":"s12", "x":60.14, "y":55.22}, {"id":"s13", "x":38.55, "y":44.34}, {"id":"s14", "x":66.19, "y":36.46},
 ]
 
 DEFAULT_DEMAND_POSITIONS = [
