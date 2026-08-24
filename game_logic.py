@@ -33,12 +33,18 @@ DEFAULT_WAREHOUSE_SLOTS = [
     # demand point, so each inherits its base point's confirmed-valid
     # location while staying well clear of the map boundary.
     {"id":"s12", "x":60.14, "y":55.22}, {"id":"s13", "x":38.55, "y":44.34}, {"id":"s14", "x":66.19, "y":36.46},
-    # s15-s17: +30% warehouse slot density request — same jitter approach as
-    # s12-s14 (8-14 units off an existing validated warehouse slot, random
-    # angle), rejecting any candidate within 4 units of any existing
-    # warehouse/demand point or within 3 units of the envelope edge
-    # (32.24-77.96 x, 14.17-96.79 y). Generated + validated programmatically.
-    {"id":"s15", "x":65.53, "y":25.21}, {"id":"s16", "x":68.79, "y":40.14}, {"id":"s17", "x":71.42, "y":48.32},
+    # s15-s17: +30% warehouse slot density request. First pass here (since
+    # replaced) used the same jitter approach as s12-s14 but validated only
+    # against the OTHER points and a rectangular x/y envelope — insufficient,
+    # since chicago_zones.png's actual city boundary is a highly irregular
+    # polygon (not a rectangle), so 2 of the 3 landed in the lake and the
+    # rejected replacements landed just outside the west edge instead.
+    # Re-validated properly this time: flood-filled the actual interior of
+    # the orange boundary outline in chicago_zones.png into a pixel mask,
+    # eroded it inward for marker-safety margin, and only accepted jittered
+    # candidates whose full marker footprint falls inside that mask (in
+    # addition to staying clear of every other warehouse/demand point).
+    {"id":"s15", "x":59.31, "y":30.48}, {"id":"s16", "x":48.84, "y":66.39}, {"id":"s17", "x":58.35, "y":66.93},
 ]
 
 DEFAULT_DEMAND_POSITIONS = [
