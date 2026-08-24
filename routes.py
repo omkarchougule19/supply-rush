@@ -499,17 +499,21 @@ def start_normal_play(payload: NormalModeStart, db: Session = Depends(get_db), e
             existing_slots = existing_slots + missing_slots
             dirty = True
 
-        # One-off coordinate fix: s15-s17 were first seeded landing in Lake
-        # Michigan / just outside the city boundary (validated only against
-        # a bounding envelope, not the map image itself). Since these ids
-        # were only ever added this session and were never real slot
-        # positions anyone built against, it's safe to correct their
-        # coordinates in place — unlike the general "never overwrite
-        # existing ids" rule above, which protects ids with real history.
+        # One-off coordinate fixes for ids that landed too close to (or
+        # outside) the map boundary — s15-s17 first landed in Lake Michigan
+        # / just outside the city edge, and s8/s13/s14 (much older, from the
+        # original farthest-point sampling pass) sat right on the boundary
+        # line with no clearance. Since these are pure "nudge inward"
+        # corrections of an existing id's position (not a full relocation),
+        # it's safe to apply in place — unlike the general "never overwrite
+        # existing ids" rule above, which protects against changing what an
+        # id *means*, not against clearing up its exact coordinate.
         BAD_SLOT_COORDS = {
             "s15": (65.53, 25.21),
             "s16": (68.79, 40.14),
-            "s17": (71.42, 48.32),
+            "s8":  (43.50, 55.50),
+            "s13": (38.55, 44.34),
+            "s14": (66.19, 36.46),
         }
         target_by_id = {s["id"]: s for s in DEFAULT_WAREHOUSE_SLOTS}
         for s in existing_slots:
@@ -517,6 +521,22 @@ def start_normal_play(payload: NormalModeStart, db: Session = Depends(get_db), e
             if bad and s.get("x") == bad[0] and s.get("y") == bad[1] and s["id"] in target_by_id:
                 s["x"] = target_by_id[s["id"]]["x"]
                 s["y"] = target_by_id[s["id"]]["y"]
+                dirty = True
+
+        # -10% slot count request: s17 was dropped from DEFAULT_WAREHOUSE_SLOTS
+        # entirely (it only ever existed for one deploy cycle). Remove it from
+        # an already-seeded scenario's slot list too, but only when nothing
+        # has actually been built there yet — otherwise leave it in place so
+        # that play's placed warehouse keeps resolving a real position.
+        if any(s["id"] == "s17" for s in existing_slots):
+            built_on_s17 = (
+                db.query(PlacedWarehouse)
+                .join(Play, Play.id == PlacedWarehouse.play_id_fk)
+                .filter(Play.scenario_id == sc.id, PlacedWarehouse.slot_id == "s17")
+                .first()
+            )
+            if not built_on_s17:
+                existing_slots = [s for s in existing_slots if s["id"] != "s17"]
                 dirty = True
 
         if dirty:
@@ -531,8 +551,23 @@ def start_normal_play(payload: NormalModeStart, db: Session = Depends(get_db), e
     missing = [z for z in DEFAULT_DEMAND_POSITIONS if z["id"] not in existing_ids]
     if missing:
         existing_demand = existing_demand + missing
-        sc.demand_zone_positions = json.dumps(existing_demand)
         dirty = True
+
+    # Same boundary-clearance nudge as the warehouse slots above.
+    BAD_DEMAND_COORDS = {
+        "d52": (43.52, 73.70),
+        "d68": (45.98, 91.62),
+    }
+    demand_target_by_id = {z["id"]: z for z in DEFAULT_DEMAND_POSITIONS}
+    for z in existing_demand:
+        bad = BAD_DEMAND_COORDS.get(z["id"])
+        if bad and z.get("x") == bad[0] and z.get("y") == bad[1] and z["id"] in demand_target_by_id:
+            z["x"] = demand_target_by_id[z["id"]]["x"]
+            z["y"] = demand_target_by_id[z["id"]]["y"]
+            dirty = True
+
+    if dirty:
+        sc.demand_zone_positions = json.dumps(existing_demand)
 
     if dirty:
         db.commit()

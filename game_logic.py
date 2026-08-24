@@ -23,7 +23,7 @@ DEFAULT_WAREHOUSE_SLOTS = [
     {"id":"s1", "x":58.42, "y":41.71},
     {"id":"s4", "x":51.43, "y":75.94}, {"id":"s6", "x":68.00, "y":70.00},
     {"id":"s7", "x":39.80, "y":30.39},
-    {"id":"s8", "x":43.50, "y":55.50}, {"id":"s9", "x":63.50, "y":31.50}, {"id":"s10", "x":66.50, "y":62.50},
+    {"id":"s8", "x":44.57, "y":55.48}, {"id":"s9", "x":63.50, "y":31.50}, {"id":"s10", "x":66.50, "y":62.50},
     {"id":"s11", "x":48.50, "y":25.50},
     # s12-s14: added later via the same validation approach as demand zones
     # d43-d70 above — jittered 8-14 units off an existing validated warehouse
@@ -32,19 +32,26 @@ DEFAULT_WAREHOUSE_SLOTS = [
     # 77.96 x, 14.17-96.79 y) or within 4 units of any existing warehouse/
     # demand point, so each inherits its base point's confirmed-valid
     # location while staying well clear of the map boundary.
-    {"id":"s12", "x":60.14, "y":55.22}, {"id":"s13", "x":38.55, "y":44.34}, {"id":"s14", "x":66.19, "y":36.46},
-    # s15-s17: +30% warehouse slot density request. First pass here (since
-    # replaced) used the same jitter approach as s12-s14 but validated only
-    # against the OTHER points and a rectangular x/y envelope — insufficient,
-    # since chicago_zones.png's actual city boundary is a highly irregular
-    # polygon (not a rectangle), so 2 of the 3 landed in the lake and the
-    # rejected replacements landed just outside the west edge instead.
-    # Re-validated properly this time: flood-filled the actual interior of
-    # the orange boundary outline in chicago_zones.png into a pixel mask,
-    # eroded it inward for marker-safety margin, and only accepted jittered
-    # candidates whose full marker footprint falls inside that mask (in
-    # addition to staying clear of every other warehouse/demand point).
-    {"id":"s15", "x":59.31, "y":30.48}, {"id":"s16", "x":48.84, "y":66.39}, {"id":"s17", "x":58.35, "y":66.93},
+    {"id":"s12", "x":60.14, "y":55.22}, {"id":"s13", "x":39.94, "y":44.24}, {"id":"s14", "x":65.31, "y":37.14},
+    # s15-s16: +30% warehouse slot density request, later trimmed ~10%
+    # (dropped s17, see below) once a real image-based boundary check
+    # existed to confirm the count was safe to pare back. First pass here
+    # used the same jitter approach as s12-s14 but validated only against
+    # the other points and a rectangular x/y envelope — insufficient, since
+    # chicago_zones.png's actual city boundary is a highly irregular polygon
+    # (not a rectangle), so 2 of the 3 first-pass points landed in the lake.
+    # Re-validated properly: flood-filled the actual interior of the orange
+    # boundary outline in chicago_zones.png into a pixel mask, eroded it
+    # inward for marker-safety margin, and only accepted jittered candidates
+    # whose full marker footprint falls inside that mask (in addition to
+    # staying clear of every other warehouse/demand point).
+    {"id":"s15", "x":59.31, "y":30.48}, {"id":"s16", "x":48.84, "y":66.39},
+    # s8/s13/s14 above were nudged a few units inward from their original
+    # farthest-point-sampling position — they sat right on the boundary
+    # outline with no clearance at all. All three (plus s15/s16 above) were
+    # re-checked against a ~1%-of-image-width buffered version of the same
+    # interior mask, so every slot now keeps a small but real gap from the
+    # coastline/city edge, not just technical non-overlap with it.
 ]
 
 DEFAULT_DEMAND_POSITIONS = [
@@ -76,12 +83,12 @@ DEFAULT_DEMAND_POSITIONS = [
     {"id":"d43", "x":58.04, "y":49.54}, {"id":"d44", "x":53.63, "y":70.52}, {"id":"d45", "x":61.53, "y":78.01},
     {"id":"d46", "x":63.17, "y":94.71}, {"id":"d47", "x":54.94, "y":32.49}, {"id":"d48", "x":42.74, "y":18.42},
     {"id":"d49", "x":64.49, "y":54.57}, {"id":"d50", "x":52.03, "y":51.59}, {"id":"d51", "x":48.87, "y":38.07},
-    {"id":"d52", "x":43.52, "y":73.70}, {"id":"d53", "x":60.39, "y":38.32}, {"id":"d54", "x":55.07, "y":24.40},
+    {"id":"d52", "x":44.71, "y":73.73}, {"id":"d53", "x":60.39, "y":38.32}, {"id":"d54", "x":55.07, "y":24.40},
     {"id":"d55", "x":52.82, "y":37.15}, {"id":"d56", "x":52.64, "y":61.13}, {"id":"d57", "x":47.65, "y":75.76},
     {"id":"d58", "x":74.80, "y":87.56}, {"id":"d59", "x":61.13, "y":87.77}, {"id":"d60", "x":65.19, "y":46.24},
     {"id":"d61", "x":65.44, "y":67.94}, {"id":"d62", "x":74.21, "y":95.88}, {"id":"d63", "x":63.62, "y":74.29},
     {"id":"d64", "x":67.39, "y":84.66}, {"id":"d65", "x":36.88, "y":20.24}, {"id":"d66", "x":49.74, "y":29.90},
-    {"id":"d67", "x":51.99, "y":56.02}, {"id":"d68", "x":45.98, "y":91.62}, {"id":"d69", "x":42.80, "y":59.88},
+    {"id":"d67", "x":51.99, "y":56.02}, {"id":"d68", "x":45.47, "y":90.69}, {"id":"d69", "x":42.80, "y":59.88},
     {"id":"d70", "x":59.46, "y":20.58},
 ]
 
