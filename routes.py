@@ -497,8 +497,30 @@ def start_normal_play(payload: NormalModeStart, db: Session = Depends(get_db), e
         missing_slots = [s for s in DEFAULT_WAREHOUSE_SLOTS if s["id"] not in existing_slot_ids]
         if missing_slots:
             existing_slots = existing_slots + missing_slots
-            sc.warehouse_slots = json.dumps(existing_slots)
             dirty = True
+
+        # One-off coordinate fix: s15-s17 were first seeded landing in Lake
+        # Michigan / just outside the city boundary (validated only against
+        # a bounding envelope, not the map image itself). Since these ids
+        # were only ever added this session and were never real slot
+        # positions anyone built against, it's safe to correct their
+        # coordinates in place — unlike the general "never overwrite
+        # existing ids" rule above, which protects ids with real history.
+        BAD_SLOT_COORDS = {
+            "s15": (65.53, 25.21),
+            "s16": (68.79, 40.14),
+            "s17": (71.42, 48.32),
+        }
+        target_by_id = {s["id"]: s for s in DEFAULT_WAREHOUSE_SLOTS}
+        for s in existing_slots:
+            bad = BAD_SLOT_COORDS.get(s["id"])
+            if bad and s.get("x") == bad[0] and s.get("y") == bad[1] and s["id"] in target_by_id:
+                s["x"] = target_by_id[s["id"]]["x"]
+                s["y"] = target_by_id[s["id"]]["y"]
+                dirty = True
+
+        if dirty:
+            sc.warehouse_slots = json.dumps(existing_slots)
 
     # Demand zones are safe to backfill additively too —
     # DEFAULT_DEMAND_POSITIONS only ever grows by appending new ids with new
