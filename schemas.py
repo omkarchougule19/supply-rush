@@ -141,8 +141,8 @@ class ScenarioCreate(BaseModel):
         key: VehicleTypeConfig(**cfg) for key, cfg in DEFAULT_VEHICLE_CONFIG.items()
     }
 
-    urgent_order_revenue:    float = 55.0
-    nonurgent_order_revenue: float = 25.0
+    urgent_order_revenue:    float = 60.0
+    nonurgent_order_revenue: float = 27.5
 
     demand_min_per_zone:   int   = 133
     demand_max_per_zone:   int   = 532

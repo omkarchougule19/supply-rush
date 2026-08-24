@@ -483,16 +483,24 @@ def start_normal_play(payload: NormalModeStart, db: Session = Depends(get_db), e
     except Exception:
         existing_demand = []
 
-    # Only backfill truly-empty legacy rows here. Overwriting whenever the
-    # constants merely differ would rewrite slot ids out from under any
-    # in-progress play (a placed warehouse's slot_id would stop resolving
-    # in advance_quarter's coordinate lookup, silently zeroing its position).
+    # Legacy empty rows get the full default set. Otherwise, merge additively
+    # like demand zones below: DEFAULT_WAREHOUSE_SLOTS only ever grows by
+    # appending new ids with new coordinates, existing ids keep their
+    # original x/y forever, so adding newly-added ids can't rewrite what an
+    # in-progress play's already-placed warehouse slot_ids resolve to.
     dirty = False
     if not existing_slots:
         sc.warehouse_slots = json.dumps(DEFAULT_WAREHOUSE_SLOTS)
         dirty = True
+    else:
+        existing_slot_ids = {s["id"] for s in existing_slots}
+        missing_slots = [s for s in DEFAULT_WAREHOUSE_SLOTS if s["id"] not in existing_slot_ids]
+        if missing_slots:
+            existing_slots = existing_slots + missing_slots
+            sc.warehouse_slots = json.dumps(existing_slots)
+            dirty = True
 
-    # Demand zones are safe to backfill additively (unlike slots, above) —
+    # Demand zones are safe to backfill additively too —
     # DEFAULT_DEMAND_POSITIONS only ever grows by appending new ids with new
     # coordinates; existing ids keep their original x/y forever, so merging
     # in newly-added ids can't shift what an in-progress play's already-
@@ -515,10 +523,16 @@ def start_normal_play(payload: NormalModeStart, db: Session = Depends(get_db), e
     target_wh_cfg = DEFAULT_WAREHOUSE_CONFIG
     target_v_cfg = DEFAULT_VEHICLE_CONFIG
 
-    if current_wh_cfg != target_wh_cfg or current_v_cfg != target_v_cfg or not sc.allow_outsourcing:
+    target_urgent_rev = 60.0
+    target_nonurgent_rev = 27.5
+
+    if (current_wh_cfg != target_wh_cfg or current_v_cfg != target_v_cfg or not sc.allow_outsourcing
+            or sc.urgent_order_revenue != target_urgent_rev or sc.nonurgent_order_revenue != target_nonurgent_rev):
         sc.warehouse_config = json.dumps(target_wh_cfg)
         sc.vehicle_config = json.dumps(target_v_cfg)
         sc.allow_outsourcing = True
+        sc.urgent_order_revenue = target_urgent_rev
+        sc.nonurgent_order_revenue = target_nonurgent_rev
         db.commit()
         db.refresh(sc)
 

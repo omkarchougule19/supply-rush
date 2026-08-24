@@ -19,7 +19,7 @@ DEFAULT_WAREHOUSE_CONFIG = {
 }
 DEFAULT_VEHICLE_CONFIG = {
     "truck": {"purchase_cost": 20_000,  "operating_cost": 800, "capacity": 200, "sell_back": 12_000,  "serves_urgent": False, "serves_nonurgent": True},
-    "drone": {"purchase_cost": 9_000,   "operating_cost": 800, "capacity": 60,  "sell_back": 5_400,   "serves_urgent": True,  "serves_nonurgent": True},
+    "drone": {"purchase_cost": 9_000,   "operating_cost": 400, "capacity": 60,  "sell_back": 5_400,   "serves_urgent": True,  "serves_nonurgent": True},
 }
 
 
@@ -45,8 +45,8 @@ class Scenario(Base):
     vehicle_config = Column(Text, default=lambda: json.dumps(DEFAULT_VEHICLE_CONFIG))
 
     # ── Order pricing ─────────────────────────────────────────────────────────
-    urgent_order_revenue    = Column(Float, default=55.0)
-    nonurgent_order_revenue = Column(Float, default=25.0)
+    urgent_order_revenue    = Column(Float, default=60.0)
+    nonurgent_order_revenue = Column(Float, default=27.5)
 
     # ── Demand parameters ─────────────────────────────────────────────────────
     demand_min_per_zone  = Column(Integer, default=133)
